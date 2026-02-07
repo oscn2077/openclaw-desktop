@@ -1,7 +1,7 @@
 {
   "name": "openclaw-desktop",
   "version": "0.1.0",
-  "description": "OpenClaw 桌面版 — 一键部署，无脑上手",
+  "description": "OpenClaw Desktop — ApexYY 专版，一键部署，无脑上手",
   "main": "src/main/index.js",
   "scripts": {
     "start": "electron .",

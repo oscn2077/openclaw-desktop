@@ -1,6 +1,6 @@
-# OpenClaw 快速上手（应急版）
+# OpenClaw 快速上手 — ApexYY 专版
 
-> Desktop 版上线前的临时方案，纯命令行 + 配置文件，2 分钟搞定。
+> Desktop 版上线前的应急方案，纯命令行 + 配置文件，2 分钟搞定。
 
 ---
 
@@ -83,9 +83,9 @@ openclaw onboard
   "models": {
     "mode": "merge",
     "providers": {
-      "yunyi-claude": {
+      "apexyy-claude": {
         "baseUrl": "https://yunyi.rdzhvip.com/claude",
-        "apiKey": "你的卡密",
+        "apiKey": "你的ApexYY卡密",
         "auth": "api-key",
         "api": "anthropic-messages",
         "headers": {},
@@ -97,7 +97,7 @@ openclaw onboard
   "agents": {
     "defaults": {
       "model": {
-        "primary": "yunyi-claude/claude-opus-4-5"
+        "primary": "apexyy-claude/claude-opus-4-5"
       },
       "maxConcurrent": 4,
       "subagents": { "maxConcurrent": 8 },
@@ -133,9 +133,9 @@ openclaw onboard
   "models": {
     "mode": "merge",
     "providers": {
-      "yunyi-codex": {
+      "apexyy-codex": {
         "baseUrl": "https://yunyi.rdzhvip.com/codex",
-        "apiKey": "你的卡密",
+        "apiKey": "你的ApexYY卡密",
         "auth": "api-key",
         "api": "openai-responses",
         "headers": {},
@@ -157,7 +157,7 @@ openclaw onboard
   "agents": {
     "defaults": {
       "model": {
-        "primary": "yunyi-codex/gpt-5.2"
+        "primary": "apexyy-codex/gpt-5.2"
       },
       "maxConcurrent": 4,
       "subagents": { "maxConcurrent": 8 },
@@ -193,7 +193,7 @@ openclaw onboard
   "models": {
     "mode": "merge",
     "providers": {
-      "yunyi-claude": {
+      "apexyy-claude": {
         "baseUrl": "https://yunyi.rdzhvip.com/claude",
         "apiKey": "你的Claude卡密",
         "auth": "api-key",
@@ -202,7 +202,7 @@ openclaw onboard
         "authHeader": false,
         "models": []
       },
-      "yunyi-codex": {
+      "apexyy-codex": {
         "baseUrl": "https://yunyi.rdzhvip.com/codex",
         "apiKey": "你的Codex卡密",
         "auth": "api-key",
@@ -226,8 +226,8 @@ openclaw onboard
   "agents": {
     "defaults": {
       "model": {
-        "primary": "yunyi-claude/claude-opus-4-5",
-        "fallbacks": ["yunyi-codex/gpt-5.2"]
+        "primary": "apexyy-claude/claude-opus-4-5",
+        "fallbacks": ["apexyy-codex/gpt-5.2"]
       },
       "maxConcurrent": 4,
       "subagents": { "maxConcurrent": 8 },

@@ -160,7 +160,7 @@ function collectModelData() {
       if (!baseUrl) return { error: 'Claude 中转模式需要填写中转地址' };
       models.push({
         type: 'proxy',
-        providerId: 'yunyi-claude',
+        providerId: 'apexyy-claude',
         baseUrl,
         apiFormat: 'anthropic-messages',
         apiKey,
@@ -200,7 +200,7 @@ function collectModelData() {
 
       models.push({
         type: 'proxy',
-        providerId: 'yunyi-codex',
+        providerId: 'apexyy-codex',
         baseUrl,
         apiFormat: 'openai-responses',
         apiKey,

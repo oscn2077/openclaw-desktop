@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
-# OpenClaw 一键安装脚本 — 云翼 (YunYi) 专版
-# 用法: bash install-yunyi.sh
+# OpenClaw 一键安装脚本 — ApexYY 专版
+# 用法: bash install-apexyy.sh
 #
-# 预置云翼中转全部节点和模型，用户只需要填 API Key
+# 预置ApexYY中转全部节点和模型，用户只需要填 API Key
 # Claude 和 Codex 是独立产品线，Key 不互通
 set -euo pipefail
 
@@ -16,7 +16,7 @@ step()  { echo -e "\n${BLUE}${BOLD}>>> $*${NC}"; }
 ask()   { echo -en "${CYAN}[?]${NC} $* "; }
 die()   { err "$*"; exit 1; }
 
-# ========== 云翼节点 ==========
+# ========== ApexYY节点 ==========
 declare -A NODES
 NODES=(
   ["1"]="https://yunyi.rdzhvip.com|国内主节点"
@@ -96,9 +96,9 @@ choose_node() {
   node_choice="${node_choice:-1}"
 
   local entry="${NODES[${node_choice}]:-${NODES[1]}}"
-  YY_BASE_URL="${entry%%|*}"
-  YY_NODE_NAME="${entry#*|}"
-  info "已选择: ${YY_NODE_NAME} (${YY_BASE_URL})"
+  AY_BASE_URL="${entry%%|*}"
+  AY_NODE_NAME="${entry#*|}"
+  info "已选择: ${AY_NODE_NAME} (${AY_BASE_URL})"
 }
 
 # ========== 选产品线 + API Key ==========
@@ -162,16 +162,16 @@ choose_primary() {
 
   if [[ "$HAS_CLAUDE" == "true" ]]; then
     echo -e "  ${BOLD}Claude 系列:${NC}"
-    echo "    ${i}) Claude Opus 4.6 (最强)"; MODEL_REFS+=("yunyi-claude/claude-opus-4-6"); ((i++))
-    echo "    ${i}) Claude Opus 4.5"; MODEL_REFS+=("yunyi-claude/claude-opus-4-5"); ((i++))
-    echo "    ${i}) Claude Sonnet 4.5 (均衡)"; MODEL_REFS+=("yunyi-claude/claude-sonnet-4-5"); ((i++))
+    echo "    ${i}) Claude Opus 4.6 (最强)"; MODEL_REFS+=("apexyy-claude/claude-opus-4-6"); ((i++))
+    echo "    ${i}) Claude Opus 4.5"; MODEL_REFS+=("apexyy-claude/claude-opus-4-5"); ((i++))
+    echo "    ${i}) Claude Sonnet 4.5 (均衡)"; MODEL_REFS+=("apexyy-claude/claude-sonnet-4-5"); ((i++))
     echo ""
   fi
 
   if [[ "$HAS_CODEX" == "true" ]]; then
     echo -e "  ${BOLD}Codex/GPT 系列:${NC}"
-    echo "    ${i}) GPT 5.2"; MODEL_REFS+=("yunyi-codex/gpt-5.2"); ((i++))
-    echo "    ${i}) GPT Codex 5.3"; MODEL_REFS+=("yunyi-codex/gpt-5.3-codex"); ((i++))
+    echo "    ${i}) GPT 5.2"; MODEL_REFS+=("apexyy-codex/gpt-5.2"); ((i++))
+    echo "    ${i}) GPT Codex 5.3"; MODEL_REFS+=("apexyy-codex/gpt-5.3-codex"); ((i++))
     echo ""
   fi
 
@@ -246,8 +246,8 @@ apply_config() {
     --skip-ui \
     --install-daemon 2>&1 | tail -5 || warn "onboard 有警告，继续..."
 
-  # 2. 写入云翼 provider 配置
-  info "写入云翼模型配置..."
+  # 2. 写入ApexYY provider 配置
+  info "写入ApexYY模型配置..."
 
   # 构建 python 参数
   local py_has_claude="False"; [[ "$HAS_CLAUDE" == "true" ]] && py_has_claude="True"
@@ -271,13 +271,13 @@ config.setdefault('models', {})['mode'] = 'merge'
 config['models'].setdefault('providers', {})
 config.setdefault('agents', {}).setdefault('defaults', {})
 
-base_url = "${YY_BASE_URL}"
+base_url = "${AY_BASE_URL}"
 has_claude = ${py_has_claude}
 has_codex = ${py_has_codex}
 
 # Claude provider — models 为空数组，自动检测
 if has_claude:
-    config['models']['providers']['yunyi-claude'] = {
+    config['models']['providers']['apexyy-claude'] = {
         'baseUrl': base_url + '/claude',
         'apiKey': "${CLAUDE_KEY}",
         'auth': 'api-key',
@@ -289,7 +289,7 @@ if has_claude:
 
 # Codex provider — 需要显式声明模型
 if has_codex:
-    config['models']['providers']['yunyi-codex'] = {
+    config['models']['providers']['apexyy-codex'] = {
         'baseUrl': base_url + '/codex',
         'apiKey': "${CODEX_KEY}",
         'auth': 'api-key',
@@ -398,7 +398,7 @@ for name, data in providers.items():
 finish() {
   step "安装完成! 🎉"
   echo ""
-  echo -e "  ${BOLD}云翼节点:${NC} ${YY_NODE_NAME} (${YY_BASE_URL})"
+  echo -e "  ${BOLD}ApexYY节点:${NC} ${AY_NODE_NAME} (${AY_BASE_URL})"
   echo ""
   echo -e "  ${BOLD}常用命令:${NC}"
   echo "    openclaw gateway status    — 查看状态"
@@ -418,8 +418,8 @@ finish() {
 # ========== 主流程 ==========
 main() {
   echo ""
-  echo -e "${BOLD}🦞 OpenClaw 一键安装 — 云翼 (YunYi) 专版${NC}"
-  echo -e "   预置全部云翼节点 + Claude/Codex 模型"
+  echo -e "${BOLD}🦞 OpenClaw 一键安装 — ApexYY 专版${NC}"
+  echo -e "   预置全部ApexYY节点 + Claude/Codex 模型"
   echo ""
 
   detect_os
