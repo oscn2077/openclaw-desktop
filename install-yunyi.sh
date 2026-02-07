@@ -3,6 +3,7 @@
 # 用法: bash install-yunyi.sh
 #
 # 预置云翼中转全部节点和模型，用户只需要填 API Key
+# Claude 和 Codex 是独立产品线，Key 不互通
 set -euo pipefail
 
 RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'
@@ -24,20 +25,6 @@ NODES=(
   ["4"]="https://cdn2.yunyi.cfd|CF国外节点3"
   ["5"]="http://47.99.42.193|备用节点1"
   ["6"]="http://47.97.100.10|备用节点2"
-)
-
-# ========== 云翼模型 ==========
-# Claude 系列
-CLAUDE_MODELS=(
-  "claude-opus-4-6|Claude Opus 4.6|200000|8192"
-  "claude-sonnet-4-5|Claude Sonnet 4.5|200000|8192"
-  "claude-haiku-4-5|Claude Haiku 4.5|200000|8192"
-)
-
-# Codex 系列
-CODEX_MODELS=(
-  "gpt-5.3-codex|GPT 5.3 Codex|128000|32768"
-  "gpt-5.2|GPT 5.2|128000|32768"
 )
 
 # ========== OS 检测 ==========
@@ -91,18 +78,6 @@ ensure_openclaw() {
   info "OpenClaw $(openclaw --version 2>/dev/null) ✓"
 }
 
-# ========== API Key ==========
-get_api_key() {
-  step "输入云翼 API Key"
-  echo ""
-  echo -e "  ${BOLD}如果还没有 Key，请联系云翼客服获取${NC}"
-  echo ""
-  ask "请输入 API Key:"
-  read -r YY_KEY
-  [[ -z "$YY_KEY" ]] && die "API Key 不能为空"
-  info "API Key 已记录"
-}
-
 # ========== 选节点 ==========
 choose_node() {
   step "选择 API 节点"
@@ -126,54 +101,94 @@ choose_node() {
   info "已选择: ${YY_NODE_NAME} (${YY_BASE_URL})"
 }
 
-# ========== 选模型 ==========
-choose_models() {
-  step "选择模型"
+# ========== 选产品线 + API Key ==========
+choose_product() {
+  step "选择产品线"
   echo ""
-  echo -e "  ${BOLD}Claude 系列${NC} (路径: /claude)"
-  local i=1
-  for m in "${CLAUDE_MODELS[@]}"; do
-    local id="${m%%|*}"; local rest="${m#*|}"; local name="${rest%%|*}"
-    echo "    ${i}) ${name} (${id})"
-    ((i++))
-  done
+  echo -e "  ${BOLD}Claude 和 Codex 是独立产品线，卡密不互通${NC}"
+  echo -e "  ${BOLD}看你买的是哪个，就选哪个${NC}"
   echo ""
-  echo -e "  ${BOLD}Codex/GPT 系列${NC} (路径: /codex)"
-  for m in "${CODEX_MODELS[@]}"; do
-    local id="${m%%|*}"; local rest="${m#*|}"; local name="${rest%%|*}"
-    echo "    ${i}) ${name} (${id})"
-    ((i++))
-  done
+  echo "    1) 只有 Claude 的卡密"
+  echo "    2) 只有 Codex (OpenAI) 的卡密"
+  echo "    3) 两个都有"
   echo ""
-  echo "    ${i}) 全部安装 (推荐)"
-  local all_choice=$i
-  echo ""
-  ask "请选择主模型 [1-${all_choice}] (默认 ${all_choice} 全部):"
-  read -r model_choice
-  model_choice="${model_choice:-${all_choice}}"
+  ask "请选择 [1-3] (默认 1):"
+  read -r product_choice
+  product_choice="${product_choice:-1}"
 
-  if [[ "$model_choice" == "$all_choice" ]]; then
-    INSTALL_ALL=true
-    # 默认主模型: Claude Opus 4.6
-    PRIMARY_MODEL_ID="claude-opus-4-6"
-    PRIMARY_PROVIDER="yunyi-claude"
-    info "安装全部模型，主模型: Claude Opus 4.6"
-  else
-    INSTALL_ALL=false
-    local idx=$((model_choice - 1))
-    local total_claude=${#CLAUDE_MODELS[@]}
-    if (( idx < total_claude )); then
-      local m="${CLAUDE_MODELS[$idx]}"
-      PRIMARY_MODEL_ID="${m%%|*}"
-      PRIMARY_PROVIDER="yunyi-claude"
-    else
-      local cidx=$((idx - total_claude))
-      local m="${CODEX_MODELS[$cidx]}"
-      PRIMARY_MODEL_ID="${m%%|*}"
-      PRIMARY_PROVIDER="yunyi-codex"
-    fi
-    info "主模型: ${PRIMARY_MODEL_ID}"
+  HAS_CLAUDE=false
+  HAS_CODEX=false
+  CLAUDE_KEY=""
+  CODEX_KEY=""
+
+  case "$product_choice" in
+    1)
+      HAS_CLAUDE=true
+      ask "请输入 Claude 卡密:"
+      read -r CLAUDE_KEY
+      [[ -z "$CLAUDE_KEY" ]] && die "卡密不能为空"
+      info "Claude 卡密已记录"
+      ;;
+    2)
+      HAS_CODEX=true
+      ask "请输入 Codex 卡密:"
+      read -r CODEX_KEY
+      [[ -z "$CODEX_KEY" ]] && die "卡密不能为空"
+      info "Codex 卡密已记录"
+      ;;
+    3)
+      HAS_CLAUDE=true
+      HAS_CODEX=true
+      ask "请输入 Claude 卡密:"
+      read -r CLAUDE_KEY
+      [[ -z "$CLAUDE_KEY" ]] && die "Claude 卡密不能为空"
+      info "Claude 卡密已记录"
+      ask "请输入 Codex 卡密:"
+      read -r CODEX_KEY
+      [[ -z "$CODEX_KEY" ]] && die "Codex 卡密不能为空"
+      info "Codex 卡密已记录"
+      ;;
+    *) die "无效选择" ;;
+  esac
+}
+
+# ========== 选主模型 ==========
+choose_primary() {
+  step "选择主模型"
+  echo ""
+
+  local i=1
+  local -a MODEL_REFS=()
+
+  if [[ "$HAS_CLAUDE" == "true" ]]; then
+    echo -e "  ${BOLD}Claude 系列:${NC}"
+    echo "    ${i}) Claude Opus 4.6 (最强)"; MODEL_REFS+=("yunyi-claude/claude-opus-4-6"); ((i++))
+    echo "    ${i}) Claude Opus 4.5"; MODEL_REFS+=("yunyi-claude/claude-opus-4-5"); ((i++))
+    echo "    ${i}) Claude Sonnet 4.5 (均衡)"; MODEL_REFS+=("yunyi-claude/claude-sonnet-4-5"); ((i++))
+    echo ""
   fi
+
+  if [[ "$HAS_CODEX" == "true" ]]; then
+    echo -e "  ${BOLD}Codex/GPT 系列:${NC}"
+    echo "    ${i}) GPT 5.2"; MODEL_REFS+=("yunyi-codex/gpt-5.2"); ((i++))
+    echo "    ${i}) GPT Codex 5.3"; MODEL_REFS+=("yunyi-codex/gpt-5.3-codex"); ((i++))
+    echo ""
+  fi
+
+  ask "请选择主模型 [1-$((i-1))] (默认 1):"
+  read -r model_choice
+  model_choice="${model_choice:-1}"
+
+  local idx=$((model_choice - 1))
+  if (( idx < 0 || idx >= ${#MODEL_REFS[@]} )); then idx=0; fi
+  PRIMARY_REF="${MODEL_REFS[$idx]}"
+  info "主模型: ${PRIMARY_REF}"
+
+  # Build fallbacks from remaining models
+  FALLBACK_REFS=()
+  for ref in "${MODEL_REFS[@]}"; do
+    [[ "$ref" != "$PRIMARY_REF" ]] && FALLBACK_REFS+=("$ref")
+  done
 }
 
 # ========== 选渠道 ==========
@@ -231,8 +246,20 @@ apply_config() {
     --skip-ui \
     --install-daemon 2>&1 | tail -5 || warn "onboard 有警告，继续..."
 
-  # 2. 用 python3 注入云翼 provider 配置
+  # 2. 写入云翼 provider 配置
   info "写入云翼模型配置..."
+
+  # 构建 python 参数
+  local py_has_claude="False"; [[ "$HAS_CLAUDE" == "true" ]] && py_has_claude="True"
+  local py_has_codex="False"; [[ "$HAS_CODEX" == "true" ]] && py_has_codex="True"
+
+  # 转义 fallbacks 为 python list
+  local fb_py="["
+  for ref in "${FALLBACK_REFS[@]:-}"; do
+    [[ -n "$ref" ]] && fb_py+="'${ref}',"
+  done
+  fb_py+="]"
+
   python3 << PYEOF
 import json
 
@@ -240,93 +267,77 @@ config_path = "$HOME/.openclaw/openclaw.json"
 with open(config_path) as f:
     config = json.load(f)
 
-# 确保结构
-config.setdefault('models', {}).setdefault('providers', {})
+config.setdefault('models', {})['mode'] = 'merge'
+config['models'].setdefault('providers', {})
 config.setdefault('agents', {}).setdefault('defaults', {})
 
 base_url = "${YY_BASE_URL}"
-api_key = "${YY_KEY}"
+has_claude = ${py_has_claude}
+has_codex = ${py_has_codex}
 
-# Claude provider
-claude_models = []
-for m in """${CLAUDE_MODELS[*]}""".split():
-    parts = m.split('|')
-    claude_models.append({
-        'id': parts[0],
-        'name': parts[1].replace('_', ' '),
-        'contextWindow': int(parts[2]),
-        'maxTokens': int(parts[3])
-    })
+# Claude provider — models 为空数组，自动检测
+if has_claude:
+    config['models']['providers']['yunyi-claude'] = {
+        'baseUrl': base_url + '/claude',
+        'apiKey': "${CLAUDE_KEY}",
+        'auth': 'api-key',
+        'api': 'anthropic-messages',
+        'headers': {},
+        'authHeader': False,
+        'models': []
+    }
 
-config['models']['providers']['yunyi-claude'] = {
-    'baseUrl': base_url + '/claude',
-    'auth': 'api-key',
-    'api': 'anthropic-messages',
-    'apiKey': api_key,
-    'models': claude_models
-}
-
-# Codex provider
-codex_models = []
-for m in """${CODEX_MODELS[*]}""".split():
-    parts = m.split('|')
-    codex_models.append({
-        'id': parts[0],
-        'name': parts[1].replace('_', ' '),
-        'contextWindow': int(parts[2]),
-        'maxTokens': int(parts[3])
-    })
-
-config['models']['providers']['yunyi-codex'] = {
-    'baseUrl': base_url + '/codex',
-    'auth': 'api-key',
-    'api': 'openai-responses',
-    'apiKey': api_key,
-    'models': codex_models
-}
+# Codex provider — 需要显式声明模型
+if has_codex:
+    config['models']['providers']['yunyi-codex'] = {
+        'baseUrl': base_url + '/codex',
+        'apiKey': "${CODEX_KEY}",
+        'auth': 'api-key',
+        'api': 'openai-responses',
+        'headers': {},
+        'authHeader': False,
+        'models': [
+            {
+                'id': 'gpt-5.2',
+                'name': 'GPT 5.2',
+                'reasoning': True,
+                'input': ['text', 'image'],
+                'cost': {'input': 0, 'output': 0, 'cacheRead': 0, 'cacheWrite': 0},
+                'contextWindow': 128000,
+                'maxTokens': 32768
+            },
+            {
+                'id': 'gpt-5.3-codex',
+                'name': 'GPT 5.3 Codex',
+                'reasoning': True,
+                'input': ['text', 'image'],
+                'cost': {'input': 0, 'output': 0, 'cacheRead': 0, 'cacheWrite': 0},
+                'contextWindow': 128000,
+                'maxTokens': 32768
+            }
+        ]
+    }
 
 # 设置主模型和 fallback
-primary = "${PRIMARY_PROVIDER}/${PRIMARY_MODEL_ID}"
-fallbacks = []
-
-install_all = ${INSTALL_ALL:+True}
-if install_all:
-    # Failover: Opus -> Sonnet -> Codex -> GPT-5.2 -> Haiku
-    all_refs = [
-        'yunyi-claude/claude-opus-4-6',
-        'yunyi-claude/claude-sonnet-4-5',
-        'yunyi-codex/gpt-5.3-codex',
-        'yunyi-codex/gpt-5.2',
-        'yunyi-claude/claude-haiku-4-5',
-    ]
-    primary = all_refs[0]
-    fallbacks = all_refs[1:]
-
 config['agents']['defaults']['model'] = {
-    'primary': primary,
-    'fallbacks': fallbacks
+    'primary': "${PRIMARY_REF}",
+    'fallbacks': ${fb_py}
 }
-
-# 模型别名
-models_map = {}
-for p_name, p_data in config['models']['providers'].items():
-    for m in p_data.get('models', []):
-        ref = f"{p_name}/{m['id']}"
-        models_map[ref] = {'alias': m['name']}
-config['agents']['defaults']['models'] = models_map
 
 with open(config_path, 'w') as f:
     json.dump(config, f, indent=2, ensure_ascii=False)
 
-print(f"已配置 {len(claude_models)} 个 Claude 模型 + {len(codex_models)} 个 Codex 模型")
-print(f"主模型: {primary}")
+providers = list(config['models']['providers'].keys())
+print(f"已配置 Provider: {', '.join(providers)}")
+print(f"主模型: ${PRIMARY_REF}")
+fallbacks = ${fb_py}
 if fallbacks:
-    print(f"Failover: {' -> '.join(fallbacks)}")
+    print(f"Failover: {' → '.join(fallbacks)}")
 PYEOF
 
   info "模型配置完成"
 
-  # 3. 用 CLI 添加渠道
+  # 3. 添加渠道
   for entry in "${CHANNEL_CMDS[@]:-}"; do
     [[ -z "$entry" ]] && continue
     local ch_type="${entry%%|*}"
@@ -378,7 +389,8 @@ if fb: print(f\"  Failover: {' → '.join(fb)}\")
 providers = c.get('models',{}).get('providers',{})
 for name, data in providers.items():
     models = [m['id'] for m in data.get('models',[])]
-    print(f\"  {name}: {', '.join(models)} ({data.get('baseUrl','?')})\")
+    label = ', '.join(models) if models else '(自动检测)'
+    print(f\"  {name}: {label} ({data.get('baseUrl','?')})\")
 " 2>/dev/null || true
 }
 
@@ -392,9 +404,10 @@ finish() {
   echo "    openclaw gateway status    — 查看状态"
   echo "    openclaw gateway restart   — 重启"
   echo "    openclaw doctor            — 健康检查"
-  echo "    openclaw models status     — 查看模型"
   echo ""
   echo -e "  ${BOLD}WebChat:${NC} http://localhost:18789"
+  echo ""
+  echo -e "  ${BOLD}额度查询:${NC} https://yunyi.rdzhvip.com/user"
   echo ""
   echo -e "  ${BOLD}切换节点:${NC}"
   echo "    编辑 ~/.openclaw/openclaw.json 中的 baseUrl"
@@ -412,9 +425,9 @@ main() {
   detect_os
   ensure_node
   ensure_openclaw
-  get_api_key
   choose_node
-  choose_models
+  choose_product
+  choose_primary
   choose_channels
   apply_config
   start_gateway

@@ -126,27 +126,31 @@ p = '$HOME/.openclaw/openclaw.json'
 with open(p) as f: c = json.load(f)
 c.setdefault('models',{}).setdefault('providers',{})['${PROV_NAME}'] = {
     'baseUrl': '${CLAUDE_BASE_URL}',
+    'apiKey': '${CLAUDE_PROXY_KEY}',
     'auth': 'api-key',
     'api': 'anthropic-messages',
-    'apiKey': '${CLAUDE_PROXY_KEY}',
-    'models': [{'id':'${MODEL_ID}','name':'${MODEL_ID}','contextWindow':200000,'maxTokens':8192}]
+    'headers': {},
+    'authHeader': False,
+    'models': []
 }
 c.setdefault('agents',{}).setdefault('defaults',{})['model'] = {'primary':'${PROV_NAME}/${MODEL_ID}','fallbacks':[]}
 with open(p,'w') as f: json.dump(c,f,indent=2)
 "
   else
     PROV_NAME="${OPENAI_PROVIDER_NAME:-openai-proxy}"
-    MODEL_ID="${OPENAI_MODEL_ID:-gpt-4o}"
+    MODEL_ID="${OPENAI_MODEL_ID:-gpt-5.2}"
     python3 -c "
 import json
 p = '$HOME/.openclaw/openclaw.json'
 with open(p) as f: c = json.load(f)
 c.setdefault('models',{}).setdefault('providers',{})['${PROV_NAME}'] = {
     'baseUrl': '${OPENAI_BASE_URL}',
-    'auth': 'api-key',
-    'api': 'openai-completions',
     'apiKey': '${OPENAI_PROXY_KEY}',
-    'models': [{'id':'${MODEL_ID}','name':'${MODEL_ID}','contextWindow':128000,'maxTokens':8192}]
+    'auth': 'api-key',
+    'api': 'openai-responses',
+    'headers': {},
+    'authHeader': False,
+    'models': [{'id':'${MODEL_ID}','name':'${MODEL_ID}','reasoning':True,'input':['text','image'],'cost':{'input':0,'output':0,'cacheRead':0,'cacheWrite':0},'contextWindow':128000,'maxTokens':32768}]
 }
 c.setdefault('agents',{}).setdefault('defaults',{})['model'] = {'primary':'${PROV_NAME}/${MODEL_ID}','fallbacks':[]}
 with open(p,'w') as f: json.dump(c,f,indent=2)

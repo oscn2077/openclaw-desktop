@@ -196,17 +196,12 @@ setup_claude_proxy() {
   "providers": {
     "${PROVIDER_ID}": {
       "baseUrl": "${PROXY_URL}",
+      "apiKey": "${PROXY_KEY}",
       "auth": "api-key",
       "api": "anthropic-messages",
-      "apiKey": "${PROXY_KEY}",
-      "models": [
-        {
-          "id": "${P_MODEL_ID}",
-          "name": "${P_MODEL_NAME}",
-          "contextWindow": 200000,
-          "maxTokens": 8192
-        }
-      ]
+      "headers": {},
+      "authHeader": false,
+      "models": []
     }
   }
 }
@@ -252,15 +247,20 @@ setup_openai_proxy() {
   "providers": {
     "${PROVIDER_ID}": {
       "baseUrl": "${PROXY_URL}",
-      "auth": "api-key",
-      "api": "openai-completions",
       "apiKey": "${PROXY_KEY}",
+      "auth": "api-key",
+      "api": "openai-responses",
+      "headers": {},
+      "authHeader": false,
       "models": [
         {
           "id": "${P_MODEL_ID}",
           "name": "${P_MODEL_NAME}",
+          "reasoning": true,
+          "input": ["text", "image"],
+          "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0 },
           "contextWindow": 128000,
-          "maxTokens": 8192
+          "maxTokens": 32768
         }
       ]
     }

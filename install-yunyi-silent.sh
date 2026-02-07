@@ -1,16 +1,27 @@
 #!/usr/bin/env bash
 # OpenClaw 云翼专版 — 静默安装
-# 用法:
+# Claude 和 Codex 是独立产品线，Key 不互通
+#
+# 用法 (只有 Claude):
+#   YY_CLAUDE_KEY=xxx bash install-yunyi-silent.sh
+#
+# 用法 (只有 Codex):
+#   YY_CODEX_KEY=xxx bash install-yunyi-silent.sh
+#
+# 用法 (两个都有):
+#   YY_CLAUDE_KEY=xxx YY_CODEX_KEY=yyy bash install-yunyi-silent.sh
+#
+# 用法 (旧版兼容，YY_KEY 同时给 Claude 和 Codex):
 #   YY_KEY=xxx bash install-yunyi-silent.sh
-#   YY_KEY=xxx YY_NODE=1 YY_PRIMARY=claude-opus-4-6 TELEGRAM_TOKEN=xxx bash install-yunyi-silent.sh
 #
 # 环境变量:
-#   YY_KEY              — (必填) 云翼 API Key
+#   YY_CLAUDE_KEY       — Claude 卡密
+#   YY_CODEX_KEY        — Codex 卡密
+#   YY_KEY              — (兼容) 同时用于 Claude 和 Codex
 #   YY_NODE             — 节点选择 1-6 (默认 1 国内主节点)
 #                         1=yunyi.rdzhvip.com 2=yunyi.cfd 3=cdn1.yunyi.cfd
 #                         4=cdn2.yunyi.cfd 5=47.99.42.193 6=47.97.100.10
-#   YY_PRIMARY          — 主模型 (默认 claude-opus-4-6)
-#   YY_INSTALL_ALL      — 安装全部模型 1/0 (默认 1)
+#   YY_PRIMARY          — 主模型 (默认 claude-opus-4-5)
 #   TELEGRAM_TOKEN      — Telegram Bot Token
 #   DISCORD_TOKEN       — Discord Bot Token
 #   SLACK_BOT_TOKEN + SLACK_APP_TOKEN — Slack
@@ -25,7 +36,14 @@ info() { echo "[✓] $*"; }
 warn() { echo "[!] $*"; }
 die()  { echo "[✗] $*"; exit 1; }
 
-[[ -z "${YY_KEY:-}" ]] && die "请设置 YY_KEY 环境变量"
+# 解析 Key
+CLAUDE_KEY="${YY_CLAUDE_KEY:-${YY_KEY:-}}"
+CODEX_KEY="${YY_CODEX_KEY:-${YY_KEY:-}}"
+
+[[ -z "$CLAUDE_KEY" && -z "$CODEX_KEY" ]] && die "请设置 YY_CLAUDE_KEY 或 YY_CODEX_KEY (或 YY_KEY)"
+
+HAS_CLAUDE=false; [[ -n "$CLAUDE_KEY" ]] && HAS_CLAUDE=true
+HAS_CODEX=false; [[ -n "$CODEX_KEY" ]] && HAS_CODEX=true
 
 PORT="${GATEWAY_PORT:-18789}"
 
@@ -60,63 +78,84 @@ openclaw onboard --non-interactive --accept-risk --mode local --auth-choice skip
   --gateway-port "${PORT}" --gateway-bind loopback --gateway-auth token \
   --skip-channels --skip-skills --skip-health --skip-ui ${DAEMON_FLAG} 2>&1 | tail -3 || warn "onboard 警告"
 
-# 写入云翼配置
-PRIMARY="${YY_PRIMARY:-claude-opus-4-6}"
-INSTALL_ALL="${YY_INSTALL_ALL:-1}"
+# 确定主模型
+PRIMARY="${YY_PRIMARY:-}"
+if [[ -z "$PRIMARY" ]]; then
+  if [[ "$HAS_CLAUDE" == "true" ]]; then PRIMARY="claude-opus-4-5"
+  else PRIMARY="gpt-5.2"; fi
+fi
 
+# 确定 primary ref
+if [[ "$PRIMARY" == gpt-* || "$PRIMARY" == o3* || "$PRIMARY" == o4* ]]; then
+  PRIMARY_REF="yunyi-codex/${PRIMARY}"
+else
+  PRIMARY_REF="yunyi-claude/${PRIMARY}"
+fi
+
+# 写入配置
 python3 << PYEOF
 import json
 
 p = "$HOME/.openclaw/openclaw.json"
 with open(p) as f: c = json.load(f)
-c.setdefault('models',{}).setdefault('providers',{})
-c.setdefault('agents',{}).setdefault('defaults',{})
+c.setdefault('models', {})['mode'] = 'merge'
+c['models'].setdefault('providers', {})
+c.setdefault('agents', {}).setdefault('defaults', {})
 
 base = "${YY_BASE}"
-key = "${YY_KEY}"
+has_claude = $( [[ "$HAS_CLAUDE" == "true" ]] && echo "True" || echo "False" )
+has_codex = $( [[ "$HAS_CODEX" == "true" ]] && echo "True" || echo "False" )
 
-c['models']['providers']['yunyi-claude'] = {
-    'baseUrl': base + '/claude', 'auth': 'api-key', 'api': 'anthropic-messages', 'apiKey': key,
-    'models': [
-        {'id':'claude-opus-4-6','name':'Claude Opus 4.6','contextWindow':200000,'maxTokens':8192},
-        {'id':'claude-sonnet-4-5','name':'Claude Sonnet 4.5','contextWindow':200000,'maxTokens':8192},
-        {'id':'claude-haiku-4-5','name':'Claude Haiku 4.5','contextWindow':200000,'maxTokens':8192},
-    ]
-}
-c['models']['providers']['yunyi-codex'] = {
-    'baseUrl': base + '/codex', 'auth': 'api-key', 'api': 'openai-responses', 'apiKey': key,
-    'models': [
-        {'id':'gpt-5.3-codex','name':'GPT 5.3 Codex','contextWindow':128000,'maxTokens':32768},
-        {'id':'gpt-5.2','name':'GPT 5.2','contextWindow':128000,'maxTokens':32768},
-    ]
-}
+if has_claude:
+    c['models']['providers']['yunyi-claude'] = {
+        'baseUrl': base + '/claude',
+        'apiKey': "${CLAUDE_KEY}",
+        'auth': 'api-key',
+        'api': 'anthropic-messages',
+        'headers': {},
+        'authHeader': False,
+        'models': []
+    }
 
-primary_id = "${PRIMARY}"
-if primary_id in ('gpt-5.3-codex','gpt-5.2'):
-    primary_ref = f"yunyi-codex/{primary_id}"
-else:
-    primary_ref = f"yunyi-claude/{primary_id}"
+if has_codex:
+    c['models']['providers']['yunyi-codex'] = {
+        'baseUrl': base + '/codex',
+        'apiKey': "${CODEX_KEY}",
+        'auth': 'api-key',
+        'api': 'openai-responses',
+        'headers': {},
+        'authHeader': False,
+        'models': [
+            {
+                'id': 'gpt-5.2', 'name': 'GPT 5.2', 'reasoning': True,
+                'input': ['text', 'image'],
+                'cost': {'input': 0, 'output': 0, 'cacheRead': 0, 'cacheWrite': 0},
+                'contextWindow': 128000, 'maxTokens': 32768
+            },
+            {
+                'id': 'gpt-5.3-codex', 'name': 'GPT 5.3 Codex', 'reasoning': True,
+                'input': ['text', 'image'],
+                'cost': {'input': 0, 'output': 0, 'cacheRead': 0, 'cacheWrite': 0},
+                'contextWindow': 128000, 'maxTokens': 32768
+            }
+        ]
+    }
 
-if "${INSTALL_ALL}" == "1":
-    fallbacks = [
-        'yunyi-claude/claude-opus-4-6','yunyi-claude/claude-sonnet-4-5',
-        'yunyi-codex/gpt-5.3-codex','yunyi-codex/gpt-5.2','yunyi-claude/claude-haiku-4-5'
-    ]
-    fallbacks = [f for f in fallbacks if f != primary_ref]
-else:
-    fallbacks = []
+primary_ref = "${PRIMARY_REF}"
+
+# Build fallbacks
+all_refs = []
+if has_claude:
+    all_refs += ['yunyi-claude/claude-opus-4-5', 'yunyi-claude/claude-opus-4-6', 'yunyi-claude/claude-sonnet-4-5']
+if has_codex:
+    all_refs += ['yunyi-codex/gpt-5.2', 'yunyi-codex/gpt-5.3-codex']
+fallbacks = [r for r in all_refs if r != primary_ref]
 
 c['agents']['defaults']['model'] = {'primary': primary_ref, 'fallbacks': fallbacks}
 
-aliases = {}
-for pn, pd in c['models']['providers'].items():
-    for m in pd.get('models',[]):
-        aliases[f"{pn}/{m['id']}"] = {'alias': m['name']}
-c['agents']['defaults']['models'] = aliases
-
-with open(p,'w') as f: json.dump(c,f,indent=2,ensure_ascii=False)
+with open(p, 'w') as f: json.dump(c, f, indent=2, ensure_ascii=False)
 print(f"主模型: {primary_ref}")
-print(f"Failover: {' → '.join(fallbacks)}" if fallbacks else "无 failover")
+if fallbacks: print(f"Failover: {' → '.join(fallbacks)}")
 PYEOF
 
 info "云翼配置完成"
@@ -131,3 +170,4 @@ info "云翼配置完成"
 openclaw gateway restart 2>&1 || openclaw gateway start 2>&1 || warn "启动失败"
 sleep 2
 info "完成! WebChat: http://localhost:${PORT}"
+info "额度查询: https://yunyi.rdzhvip.com/user"
