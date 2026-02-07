@@ -459,13 +459,12 @@ ipcMain.handle('test-connection', async (event, { baseUrl, apiKey, apiFormat }) 
           },
           timeout: 15000,
         };
-      } else if (apiFormat === 'openai-responses' || apiFormat === 'openai-chat') {
-        // OpenAI-style: POST /v1/chat/completions
-        testUrl = new URL(baseUrl.replace(/\/$/, '') + '/v1/chat/completions');
+      } else if (apiFormat === 'openai-responses') {
+        // OpenAI Responses API: POST /v1/responses
+        testUrl = new URL(baseUrl.replace(/\/$/, '') + '/v1/responses');
         postData = JSON.stringify({
-          model: 'gpt-4.1',
-          max_tokens: 1,
-          messages: [{ role: 'user', content: 'hi' }],
+          model: 'gpt-5.2',
+          input: 'hi',
         });
         options = {
           hostname: testUrl.hostname,

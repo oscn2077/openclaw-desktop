@@ -78,9 +78,17 @@
         { "x": 410, "y": 220, "type": "link", "path": "/Applications" }
       ]
     },
-    "publish": null
+    "publish": {
+      "provider": "github",
+      "owner": "oscn2077",
+      "repo": "openclaw-desktop",
+      "releaseType": "release"
+    },
+    "asar": true,
+    "artifactName": "${productName}-${version}-${os}-${arch}.${ext}"
   },
   "dependencies": {
+    "electron-updater": "^6.3.0",
     "express": "^4.21.0",
     "ws": "^8.18.0"
   },

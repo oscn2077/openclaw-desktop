@@ -1,0 +1,94 @@
+name: Test & Lint
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      # ── Bash syntax check ──
+      - name: Check bash scripts syntax
+        run: |
+          echo "=== Checking bash script syntax ==="
+          errors=0
+          for f in $(find . -name '*.sh' -not -path './node_modules/*'); do
+            echo "Checking: $f"
+            if ! bash -n "$f"; then
+              echo "❌ Syntax error in $f"
+              errors=$((errors + 1))
+            else
+              echo "✅ $f OK"
+            fi
+          done
+          if [ $errors -gt 0 ]; then
+            echo "❌ $errors script(s) have syntax errors"
+            exit 1
+          fi
+          echo "✅ All bash scripts pass syntax check"
+
+      # ── JS syntax check ──
+      - name: Check JavaScript syntax
+        run: |
+          echo "=== Checking JavaScript syntax ==="
+          errors=0
+          for f in $(find src/ -name '*.js' -not -path '*/node_modules/*'); do
+            echo "Checking: $f"
+            if ! node --check "$f"; then
+              echo "❌ Syntax error in $f"
+              errors=$((errors + 1))
+            else
+              echo "✅ $f OK"
+            fi
+          done
+          if [ $errors -gt 0 ]; then
+            echo "❌ $errors file(s) have syntax errors"
+            exit 1
+          fi
+          echo "✅ All JavaScript files pass syntax check"
+
+      # ── E2E test ──
+      - name: Run E2E tests
+        run: |
+          chmod +x test-e2e.sh
+          bash test-e2e.sh
+        env:
+          CI: true
+
+      # ── Package.json validation ──
+      - name: Validate package.json
+        run: |
+          node -e "
+            const pkg = require('./package.json');
+            const errors = [];
+            if (!pkg.build) errors.push('Missing build config');
+            if (!pkg.build?.appId) errors.push('Missing appId');
+            if (!pkg.build?.productName) errors.push('Missing productName');
+            if (!pkg.build?.win) errors.push('Missing win config');
+            if (!pkg.build?.mac) errors.push('Missing mac config');
+            if (!pkg.build?.linux) errors.push('Missing linux config');
+            if (!pkg.build?.nsis) errors.push('Missing nsis config');
+            if (!pkg.main) errors.push('Missing main entry');
+            if (errors.length > 0) {
+              console.error('❌ package.json validation failed:');
+              errors.forEach(e => console.error('  -', e));
+              process.exit(1);
+            }
+            console.log('✅ package.json validation passed');
+          "
