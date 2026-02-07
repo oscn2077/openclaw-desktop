@@ -55,12 +55,30 @@ ensure_node() {
       brew install node@22 && brew link --overwrite node@22 2>/dev/null ;;
     linux|wsl)
       if command -v apt-get &>/dev/null; then
+        # Ubuntu / Debian / WSL
         curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash -
         sudo apt-get install -y nodejs
       elif command -v dnf &>/dev/null; then
+        # Fedora / RHEL 8+ / CentOS Stream / Amazon Linux 2023
         curl -fsSL https://rpm.nodesource.com/setup_22.x | sudo bash -
         sudo dnf install -y nodejs
-      else die "不支持的包管理器"; fi ;;
+      elif command -v yum &>/dev/null; then
+        # CentOS 7 / RHEL 7 / Amazon Linux 2
+        curl -fsSL https://rpm.nodesource.com/setup_22.x | sudo bash -
+        sudo yum install -y nodejs
+      elif command -v pacman &>/dev/null; then
+        # Arch / Manjaro
+        sudo pacman -Sy --noconfirm nodejs npm
+      elif command -v apk &>/dev/null; then
+        # Alpine
+        sudo apk add --no-cache nodejs npm
+      elif command -v zypper &>/dev/null; then
+        # openSUSE
+        curl -fsSL https://rpm.nodesource.com/setup_22.x | sudo bash -
+        sudo zypper install -y nodejs
+      else
+        die "不支持的包管理器，请手动安装 Node.js 22+: https://nodejs.org"
+      fi ;;
   esac
   info "Node.js $(node -v) 安装完成"
 }

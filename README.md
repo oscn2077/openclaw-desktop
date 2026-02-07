@@ -4,12 +4,14 @@
 
 ## 应急版（Desktop 上线前）
 
-### 交互式安装
+### Linux / macOS / WSL — 交互式
 ```bash
 bash <(curl -fsSL https://raw.githubusercontent.com/oscn2077/openclaw-desktop/main/install-apexyy.sh)
 ```
 
-### 静默安装
+支持：Ubuntu / Debian / CentOS / Fedora / RHEL / Arch / Manjaro / Alpine / openSUSE / macOS / WSL
+
+### Linux / macOS / WSL — 静默安装
 
 只有 Claude 卡密：
 ```bash
@@ -31,15 +33,28 @@ AY_CLAUDE_KEY=claude卡密 AY_CODEX_KEY=codex卡密 bash <(curl -fsSL https://ra
 AY_CLAUDE_KEY=xxx AY_NODE=2 TELEGRAM_TOKEN=bot_token bash <(curl -fsSL https://raw.githubusercontent.com/oscn2077/openclaw-desktop/main/install-apexyy-silent.sh)
 ```
 
-### Windows 用户
+### Windows — PowerShell（管理员）
 
-**方案 A — WSL（推荐）：**
+一键安装（交互式）：
 ```powershell
-wsl --install
-# 重启后进 WSL，跑上面的 Linux 命令
+Set-ExecutionPolicy RemoteSigned -Scope CurrentUser
+irm https://raw.githubusercontent.com/oscn2077/openclaw-desktop/main/install-apexyy.ps1 | iex
 ```
 
-**方案 B — 手动配置：** 见 [QUICKSTART.md](QUICKSTART.md)
+带参数：
+```powershell
+irm https://raw.githubusercontent.com/oscn2077/openclaw-desktop/main/install-apexyy.ps1 -OutFile install.ps1
+.\install.ps1 -ClaudeKey "你的卡密" -Node 1 -TelegramToken "bot_token"
+```
+
+### Windows — WSL（备选）
+```powershell
+wsl --install
+# 重启后进 WSL，跑 Linux 命令
+```
+
+### 手动配置
+见 [QUICKSTART.md](QUICKSTART.md)
 
 ## Desktop 版开发
 

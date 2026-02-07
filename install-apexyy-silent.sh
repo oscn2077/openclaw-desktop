@@ -56,10 +56,23 @@ info "节点: ${AY_BASE}"
 # Node.js
 if [[ "${SKIP_NODE_INSTALL:-}" != "1" ]]; then
   if ! command -v node &>/dev/null || (( $(node -v | sed 's/v//' | cut -d. -f1) < 22 )); then
-    if [[ "$OSTYPE" == "darwin"* ]]; then brew install node@22 2>/dev/null
+    if [[ "$OSTYPE" == "darwin"* ]]; then
+      brew install node@22 2>/dev/null
     elif command -v apt-get &>/dev/null; then
       curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash - && sudo apt-get install -y nodejs
-    else die "请手动安装 Node.js 22+"; fi
+    elif command -v dnf &>/dev/null; then
+      curl -fsSL https://rpm.nodesource.com/setup_22.x | sudo bash - && sudo dnf install -y nodejs
+    elif command -v yum &>/dev/null; then
+      curl -fsSL https://rpm.nodesource.com/setup_22.x | sudo bash - && sudo yum install -y nodejs
+    elif command -v pacman &>/dev/null; then
+      sudo pacman -Sy --noconfirm nodejs npm
+    elif command -v apk &>/dev/null; then
+      sudo apk add --no-cache nodejs npm
+    elif command -v zypper &>/dev/null; then
+      curl -fsSL https://rpm.nodesource.com/setup_22.x | sudo bash - && sudo zypper install -y nodejs
+    else
+      die "请手动安装 Node.js 22+: https://nodejs.org"
+    fi
   fi
   info "Node.js $(node -v)"
 fi
