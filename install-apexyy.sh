@@ -40,14 +40,27 @@ detect_os() {
 # ========== Node.js ==========
 ensure_node() {
   step "检查 Node.js"
+
+  # 加载 nvm（如果存在）
+  export NVM_DIR="${NVM_DIR:-$HOME/.nvm}"
+  [ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh" 2>/dev/null
+
   if command -v node &>/dev/null; then
     local ver; ver=$(node -v | sed 's/v//' | cut -d. -f1)
     if (( ver >= 22 )); then info "Node.js $(node -v) ✓"; return 0
-    else warn "Node.js $(node -v) 版本过低"; fi
+    else warn "Node.js $(node -v) 版本过低，需要 22+"; fi
   else warn "未检测到 Node.js"; fi
 
   ask "自动安装 Node.js 22? (Y/n)"; read -r ans
   [[ "${ans,,}" == "n" ]] && die "请手动安装: https://nodejs.org"
+
+  # 优先用 nvm 升级（如果已有 nvm）
+  if command -v nvm &>/dev/null; then
+    info "检测到 nvm，使用 nvm 安装 Node.js 22..."
+    nvm install 22 && nvm use 22 && nvm alias default 22
+    info "Node.js $(node -v) 安装完成"
+    return 0
+  fi
 
   case "$OS" in
     macos)
@@ -78,8 +91,27 @@ ensure_node() {
         sudo zypper install -y nodejs
       else
         die "不支持的包管理器，请手动安装 Node.js 22+: https://nodejs.org"
+      fi
+
+      # 如果系统包管理器装完后 PATH 里还是旧版（nvm 覆盖），强制用系统版
+      if command -v node &>/dev/null; then
+        local new_ver; new_ver=$(node -v | sed 's/v//' | cut -d. -f1)
+        if (( new_ver < 22 )); then
+          warn "PATH 中仍是旧版 Node，尝试用 nvm 安装..."
+          # 安装 nvm 并装 22
+          curl -fsSL https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.1/install.sh | bash
+          export NVM_DIR="$HOME/.nvm"
+          [ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"
+          nvm install 22 && nvm use 22 && nvm alias default 22
+        fi
       fi ;;
   esac
+
+  # 最终验证
+  local final_ver; final_ver=$(node -v 2>/dev/null | sed 's/v//' | cut -d. -f1)
+  if (( final_ver < 22 )); then
+    die "Node.js 安装后版本仍为 $(node -v)，请手动升级到 22+: https://nodejs.org"
+  fi
   info "Node.js $(node -v) 安装完成"
 }
 

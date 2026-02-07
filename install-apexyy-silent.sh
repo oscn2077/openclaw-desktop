@@ -55,8 +55,13 @@ info "节点: ${AY_BASE}"
 
 # Node.js
 if [[ "${SKIP_NODE_INSTALL:-}" != "1" ]]; then
+  export NVM_DIR="${NVM_DIR:-$HOME/.nvm}"
+  [ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh" 2>/dev/null
+
   if ! command -v node &>/dev/null || (( $(node -v | sed 's/v//' | cut -d. -f1) < 22 )); then
-    if [[ "$OSTYPE" == "darwin"* ]]; then
+    if command -v nvm &>/dev/null; then
+      nvm install 22 && nvm use 22 && nvm alias default 22
+    elif [[ "$OSTYPE" == "darwin"* ]]; then
       brew install node@22 2>/dev/null
     elif command -v apt-get &>/dev/null; then
       curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash - && sudo apt-get install -y nodejs
@@ -72,6 +77,14 @@ if [[ "${SKIP_NODE_INSTALL:-}" != "1" ]]; then
       curl -fsSL https://rpm.nodesource.com/setup_22.x | sudo bash - && sudo zypper install -y nodejs
     else
       die "请手动安装 Node.js 22+: https://nodejs.org"
+    fi
+
+    # nvm 覆盖 PATH 导致还是旧版
+    if (( $(node -v 2>/dev/null | sed 's/v//' | cut -d. -f1) < 22 )); then
+      curl -fsSL https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.1/install.sh | bash
+      export NVM_DIR="$HOME/.nvm"
+      [ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"
+      nvm install 22 && nvm use 22 && nvm alias default 22
     fi
   fi
   info "Node.js $(node -v)"
