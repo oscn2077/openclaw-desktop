@@ -6,6 +6,14 @@
 # Claude 和 Codex 是独立产品线，Key 不互通
 set -euo pipefail
 
+# 检查 bash 版本 (需要 4+ 支持关联数组)
+if (( BASH_VERSINFO[0] < 4 )); then
+  echo "[✗] 需要 bash 4+，当前版本: ${BASH_VERSION}"
+  echo "    macOS 用户请运行: brew install bash"
+  echo "    然后用: /usr/local/bin/bash install-apexyy.sh"
+  exit 1
+fi
+
 RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'
 BLUE='\033[0;34m'; CYAN='\033[0;36m'; BOLD='\033[1m'; NC='\033[0m'
 
@@ -299,21 +307,22 @@ apply_config() {
   # 2. 写入ApexYY provider 配置
   info "写入ApexYY模型配置..."
 
-  # 构建 python 参数
+  # 通过环境变量传递 key（避免 heredoc 中特殊字符破坏 python 语法）
   local py_has_claude="False"; [[ "$HAS_CLAUDE" == "true" ]] && py_has_claude="True"
   local py_has_codex="False"; [[ "$HAS_CODEX" == "true" ]] && py_has_codex="True"
 
   # 转义 fallbacks 为 python list
   local fb_py="["
-  for ref in "${FALLBACK_REFS[@]:-}"; do
-    [[ -n "$ref" ]] && fb_py+="'${ref}',"
+  local _ref
+  for _ref in "${FALLBACK_REFS[@]+"${FALLBACK_REFS[@]}"}"; do
+    [[ -n "$_ref" ]] && fb_py+="'${_ref}',"
   done
   fb_py+="]"
 
-  python3 << PYEOF
-import json
+  AY_CLAUDE_KEY="$CLAUDE_KEY" AY_CODEX_KEY="$CODEX_KEY" python3 << PYEOF
+import json, os
 
-config_path = "$HOME/.openclaw/openclaw.json"
+config_path = os.path.expanduser("~/.openclaw/openclaw.json")
 with open(config_path) as f:
     config = json.load(f)
 
@@ -325,11 +334,15 @@ base_url = "${AY_BASE_URL}"
 has_claude = ${py_has_claude}
 has_codex = ${py_has_codex}
 
+# 从环境变量读取 key（安全，不受特殊字符影响）
+claude_key = os.environ.get('AY_CLAUDE_KEY', '')
+codex_key = os.environ.get('AY_CODEX_KEY', '')
+
 # Claude provider — models 为空数组，自动检测
 if has_claude:
     config['models']['providers']['apexyy-claude'] = {
         'baseUrl': base_url + '/claude',
-        'apiKey': "${CLAUDE_KEY}",
+        'apiKey': claude_key,
         'auth': 'api-key',
         'api': 'anthropic-messages',
         'headers': {},
@@ -341,7 +354,7 @@ if has_claude:
 if has_codex:
     config['models']['providers']['apexyy-codex'] = {
         'baseUrl': base_url + '/codex',
-        'apiKey': "${CODEX_KEY}",
+        'apiKey': codex_key,
         'auth': 'api-key',
         'api': 'openai-responses',
         'headers': {},
@@ -388,7 +401,7 @@ PYEOF
   info "模型配置完成"
 
   # 3. 添加渠道
-  for entry in "${CHANNEL_CMDS[@]:-}"; do
+  for entry in "${CHANNEL_CMDS[@]+"${CHANNEL_CMDS[@]}"}"; do
     [[ -z "$entry" ]] && continue
     local ch_type="${entry%%|*}"
     local ch_rest="${entry#*|}"

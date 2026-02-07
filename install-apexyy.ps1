@@ -193,6 +193,10 @@ if (-not $config.models) { $config | Add-Member -NotePropertyName "models" -Note
 if (-not $config.models.providers) { $config.models | Add-Member -NotePropertyName "providers" -NotePropertyValue @{} }
 $config.models.mode = "merge"
 
+# 确保 agents.defaults 存在
+if (-not $config.agents) { $config | Add-Member -NotePropertyName "agents" -NotePropertyValue @{} }
+if (-not $config.agents.defaults) { $config.agents | Add-Member -NotePropertyName "defaults" -NotePropertyValue @{} }
+
 # Claude provider
 if ($ClaudeKey) {
     $config.models.providers | Add-Member -NotePropertyName "apexyy-claude" -NotePropertyValue @{
@@ -202,7 +206,7 @@ if ($ClaudeKey) {
         api = "anthropic-messages"
         headers = @{}
         authHeader = $false
-        models = @()
+        models = [System.Collections.ArrayList]@()
     } -Force
     Info "Claude provider 已配置"
 }

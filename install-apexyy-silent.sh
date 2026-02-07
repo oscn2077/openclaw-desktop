@@ -32,15 +32,27 @@
 #   GATEWAY_PORT        — 端口 (默认 18789)
 set -euo pipefail
 
+# 检查 bash 版本 (需要 4+ 支持关联数组)
+if (( BASH_VERSINFO[0] < 4 )); then
+  echo "[✗] 需要 bash 4+，当前版本: ${BASH_VERSION}"
+  exit 1
+fi
+
 info() { echo "[✓] $*"; }
 warn() { echo "[!] $*"; }
 die()  { echo "[✗] $*"; exit 1; }
 
 # 解析 Key
+# AY_KEY 兼容模式：只用于 Claude（Claude 是默认产品线）
 CLAUDE_KEY="${AY_CLAUDE_KEY:-${AY_KEY:-}}"
-CODEX_KEY="${AY_CODEX_KEY:-${AY_KEY:-}}"
+CODEX_KEY="${AY_CODEX_KEY:-}"
 
 [[ -z "$CLAUDE_KEY" && -z "$CODEX_KEY" ]] && die "请设置 AY_CLAUDE_KEY 或 AY_CODEX_KEY (或 AY_KEY)"
+
+# 如果用了 AY_KEY 且没有单独设置 AY_CODEX_KEY，提示
+if [[ -n "${AY_KEY:-}" && -z "${AY_CLAUDE_KEY:-}" && -z "${AY_CODEX_KEY:-}" ]]; then
+  warn "AY_KEY 仅用于 Claude。如需 Codex 请单独设置 AY_CODEX_KEY"
+fi
 
 HAS_CLAUDE=false; [[ -n "$CLAUDE_KEY" ]] && HAS_CLAUDE=true
 HAS_CODEX=false; [[ -n "$CODEX_KEY" ]] && HAS_CODEX=true
@@ -119,10 +131,10 @@ else
 fi
 
 # 写入配置
-python3 << PYEOF
-import json
+AY_CLAUDE_KEY_ENV="$CLAUDE_KEY" AY_CODEX_KEY_ENV="$CODEX_KEY" python3 << PYEOF
+import json, os
 
-p = "$HOME/.openclaw/openclaw.json"
+p = os.path.expanduser("~/.openclaw/openclaw.json")
 with open(p) as f: c = json.load(f)
 c.setdefault('models', {})['mode'] = 'merge'
 c['models'].setdefault('providers', {})
@@ -132,10 +144,14 @@ base = "${AY_BASE}"
 has_claude = $( [[ "$HAS_CLAUDE" == "true" ]] && echo "True" || echo "False" )
 has_codex = $( [[ "$HAS_CODEX" == "true" ]] && echo "True" || echo "False" )
 
+# 从环境变量读取 key（安全，不受特殊字符影响）
+claude_key = os.environ.get('AY_CLAUDE_KEY_ENV', '')
+codex_key = os.environ.get('AY_CODEX_KEY_ENV', '')
+
 if has_claude:
     c['models']['providers']['apexyy-claude'] = {
         'baseUrl': base + '/claude',
-        'apiKey': "${CLAUDE_KEY}",
+        'apiKey': claude_key,
         'auth': 'api-key',
         'api': 'anthropic-messages',
         'headers': {},
@@ -146,7 +162,7 @@ if has_claude:
 if has_codex:
     c['models']['providers']['apexyy-codex'] = {
         'baseUrl': base + '/codex',
-        'apiKey': "${CODEX_KEY}",
+        'apiKey': codex_key,
         'auth': 'api-key',
         'api': 'openai-responses',
         'headers': {},
