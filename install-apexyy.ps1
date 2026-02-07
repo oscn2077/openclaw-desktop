@@ -63,14 +63,23 @@ if ($nodeVer) {
 
 if (-not $nodeVer) {
     Warn "未检测到 Node.js 22+，正在安装..."
-    # 用 winget 或 直接下载
     $hasWinget = Get-Command winget -ErrorAction SilentlyContinue
     if ($hasWinget) {
         winget install OpenJS.NodeJS.LTS --accept-package-agreements --accept-source-agreements
     } else {
-        Warn "未找到 winget，请手动安装 Node.js: https://nodejs.org"
-        Warn "安装后重新运行此脚本"
-        exit 1
+        # 没有 winget，直接下载 Node.js 安装包
+        Warn "未找到 winget，尝试直接下载 Node.js..."
+        $nodeUrl = "https://nodejs.org/dist/v22.15.0/node-v22.15.0-x64.msi"
+        $nodeMsi = Join-Path $env:TEMP "node-install.msi"
+        try {
+            Invoke-WebRequest -Uri $nodeUrl -OutFile $nodeMsi -UseBasicParsing
+            Start-Process msiexec.exe -ArgumentList "/i `"$nodeMsi`" /qn" -Wait -NoNewWindow
+            Remove-Item $nodeMsi -Force -ErrorAction SilentlyContinue
+        } catch {
+            Err "自动下载失败，请手动安装 Node.js: https://nodejs.org"
+            Start-Process "https://nodejs.org"
+            exit 1
+        }
     }
     # 刷新 PATH
     $env:Path = [System.Environment]::GetEnvironmentVariable("Path", "Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path", "User")
@@ -86,8 +95,18 @@ if (-not $hasGit) {
     if ($hasWinget) {
         winget install Git.Git --accept-package-agreements --accept-source-agreements
     } else {
-        Warn "请手动安装 Git: https://git-scm.com"
-        exit 1
+        Warn "未找到 winget，尝试直接下载 Git..."
+        $gitUrl = "https://github.com/git-for-windows/git/releases/download/v2.47.1.windows.2/Git-2.47.1.2-64-bit.exe"
+        $gitExe = Join-Path $env:TEMP "git-install.exe"
+        try {
+            Invoke-WebRequest -Uri $gitUrl -OutFile $gitExe -UseBasicParsing
+            Start-Process $gitExe -ArgumentList "/VERYSILENT /NORESTART" -Wait -NoNewWindow
+            Remove-Item $gitExe -Force -ErrorAction SilentlyContinue
+        } catch {
+            Err "自动下载失败，请手动安装 Git: https://git-scm.com"
+            Start-Process "https://git-scm.com"
+            exit 1
+        }
     }
     $env:Path = [System.Environment]::GetEnvironmentVariable("Path", "Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path", "User")
 }
