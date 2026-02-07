@@ -34,4 +34,4 @@ Desktop.ini
 *.deb
 *.rpm
 *.snap
-web-panel/
+web-panel/node_modules/

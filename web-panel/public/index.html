@@ -1,0 +1,456 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>OpenClaw Web Panel</title>
+  <link rel="stylesheet" href="css/style.css">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦞</text></svg>">
+</head>
+<body>
+  <div id="app">
+    <!-- Sidebar -->
+    <nav id="sidebar">
+      <div class="logo">
+        <span>🦞 OpenClaw</span>
+        <span class="version" id="sidebar-version"></span>
+      </div>
+      <div class="nav-items">
+        <button class="nav-item active" data-page="status" onclick="showPage('status')">
+          <span class="icon">📊</span> <span>状态</span>
+        </button>
+        <button class="nav-item" data-page="wizard" onclick="showPage('wizard')">
+          <span class="icon">🧙</span> <span>配置向导</span>
+        </button>
+        <button class="nav-item" data-page="models" onclick="showPage('models')">
+          <span class="icon">🧠</span> <span>模型</span>
+        </button>
+        <button class="nav-item" data-page="channels" onclick="showPage('channels')">
+          <span class="icon">💬</span> <span>渠道</span>
+        </button>
+        <button class="nav-item" data-page="settings" onclick="showPage('settings')">
+          <span class="icon">⚙️</span> <span>配置编辑</span>
+        </button>
+        <button class="nav-item" data-page="logs" onclick="showPage('logs')">
+          <span class="icon">📋</span> <span>日志</span>
+        </button>
+      </div>
+      <div class="nav-footer">
+        <div id="gateway-indicator" class="indicator stopped">
+          <span class="dot"></span>
+          <span class="text">已停止</span>
+        </div>
+      </div>
+    </nav>
+
+    <!-- Main Content -->
+    <main id="content">
+
+      <!-- ═══════ Status Page ═══════ -->
+      <div id="page-status" class="page active">
+        <h1>📊 系统状态</h1>
+
+        <div class="status-grid">
+          <div class="status-card">
+            <div class="status-title">Gateway</div>
+            <div class="status-value">
+              <span id="status-gateway-badge" class="gateway-badge stopped">
+                <span class="dot"></span>
+                <span id="status-gateway-text">检测中...</span>
+              </span>
+            </div>
+            <div class="status-actions">
+              <button class="btn small primary" id="btn-start" onclick="gatewayStart()">启动</button>
+              <button class="btn small danger" id="btn-stop" onclick="gatewayStop()" style="display:none;">停止</button>
+              <button class="btn small" id="btn-restart" onclick="gatewayRestart()" style="display:none;">重启</button>
+            </div>
+          </div>
+          <div class="status-card">
+            <div class="status-title">主模型</div>
+            <div class="status-value" id="status-model">—</div>
+            <div class="status-sub" id="status-model-provider"></div>
+          </div>
+          <div class="status-card">
+            <div class="status-title">Fallback 链</div>
+            <div class="status-value" style="font-size:14px;" id="status-fallbacks">—</div>
+          </div>
+          <div class="status-card">
+            <div class="status-title">聊天渠道</div>
+            <div class="status-value" id="status-channels">—</div>
+          </div>
+          <div class="status-card">
+            <div class="status-title">Providers</div>
+            <div class="status-value" id="status-providers">0</div>
+          </div>
+          <div class="status-card">
+            <div class="status-title">WebChat</div>
+            <div class="status-value" style="font-size:14px;">
+              <a href="http://localhost:18789" target="_blank" id="webchat-link">打开网页聊天 →</a>
+            </div>
+          </div>
+        </div>
+
+        <!-- System Info -->
+        <div class="section-card">
+          <h3>🖥️ 系统信息</h3>
+          <div class="sys-info-grid">
+            <div class="info-row">
+              <span class="info-label">Node.js</span>
+              <span class="info-value" id="sys-node">—</span>
+            </div>
+            <div class="info-row">
+              <span class="info-label">操作系统</span>
+              <span class="info-value" id="sys-os">—</span>
+            </div>
+            <div class="info-row">
+              <span class="info-label">OpenClaw</span>
+              <span class="info-value" id="sys-openclaw">—</span>
+            </div>
+            <div class="info-row">
+              <span class="info-label">主机名</span>
+              <span class="info-value" id="sys-hostname">—</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Provider List -->
+        <div id="status-provider-list"></div>
+      </div>
+
+      <!-- ═══════ Wizard Page ═══════ -->
+      <div id="page-wizard" class="page">
+        <div class="wizard">
+          <div class="wizard-header">
+            <h1>🧙 配置向导</h1>
+            <p>三步完成 OpenClaw 配置</p>
+          </div>
+
+          <div class="steps-indicator">
+            <div class="step-dot active" id="step-dot-1"></div>
+            <div class="step-dot" id="step-dot-2"></div>
+            <div class="step-dot" id="step-dot-3"></div>
+          </div>
+
+          <!-- Step 1: Choose Product -->
+          <div class="wizard-step active" id="wizard-step-1">
+            <h2>第 1 步：选择产品</h2>
+            <p class="hint">Claude 和 Codex 是独立产品线，卡密不互通</p>
+
+            <div class="wizard-cards">
+              <div class="wizard-card" id="wz-product-claude" onclick="selectProduct('claude')">
+                <div class="wizard-card-header">
+                  <span class="wizard-card-icon">🟣</span>
+                  <div>
+                    <div class="wizard-card-title">Claude (Anthropic)</div>
+                    <div class="wizard-card-desc">Claude Opus 4.6 / Sonnet 4.5 等</div>
+                  </div>
+                </div>
+                <div class="wizard-card-body">
+                  <div class="form-group">
+                    <label>Claude 卡密 (API Key)</label>
+                    <input type="password" id="wz-claude-key" placeholder="输入你的 Claude 卡密">
+                  </div>
+                </div>
+              </div>
+
+              <div class="wizard-card" id="wz-product-codex" onclick="selectProduct('codex')">
+                <div class="wizard-card-header">
+                  <span class="wizard-card-icon">🟢</span>
+                  <div>
+                    <div class="wizard-card-title">Codex (OpenAI)</div>
+                    <div class="wizard-card-desc">GPT 5.2 / Codex 5.3 / o3 等</div>
+                  </div>
+                </div>
+                <div class="wizard-card-body">
+                  <div class="form-group">
+                    <label>Codex 卡密 (API Key)</label>
+                    <input type="password" id="wz-codex-key" placeholder="输入你的 Codex 卡密">
+                  </div>
+                </div>
+              </div>
+
+              <div class="wizard-card" id="wz-product-both" onclick="selectProduct('both')">
+                <div class="wizard-card-header">
+                  <span class="wizard-card-icon">🔥</span>
+                  <div>
+                    <div class="wizard-card-title">两个都有</div>
+                    <div class="wizard-card-desc">同时配置 Claude + Codex</div>
+                  </div>
+                </div>
+                <div class="wizard-card-body">
+                  <div class="form-group">
+                    <label>Claude 卡密</label>
+                    <input type="password" id="wz-both-claude-key" placeholder="输入 Claude 卡密">
+                  </div>
+                  <div class="form-group">
+                    <label>Codex 卡密</label>
+                    <input type="password" id="wz-both-codex-key" placeholder="输入 Codex 卡密">
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div class="wizard-buttons">
+              <div style="flex:1;"></div>
+              <button class="btn primary" onclick="wizardNext(2)" id="wz-btn-step1">下一步 →</button>
+            </div>
+          </div>
+
+          <!-- Step 2: Choose Node -->
+          <div class="wizard-step" id="wizard-step-2">
+            <h2>第 2 步：选择节点</h2>
+            <p class="hint">国内用户推荐国内主节点，海外用户推荐 CF 节点</p>
+
+            <div class="node-grid">
+              <div class="node-option selected" data-node="domestic" onclick="selectNode(this)">
+                <div class="node-name">🇨🇳 国内主节点</div>
+                <div class="node-url">yunyi.rdzhvip.com</div>
+              </div>
+              <div class="node-option" data-node="overseas" onclick="selectNode(this)">
+                <div class="node-name">🌍 CF 国外节点 1</div>
+                <div class="node-url">yunyi.cfd</div>
+              </div>
+              <div class="node-option" data-node="overseas2" onclick="selectNode(this)">
+                <div class="node-name">🌍 CF 国外节点 2</div>
+                <div class="node-url">cdn1.yunyi.cfd</div>
+              </div>
+              <div class="node-option" data-node="overseas3" onclick="selectNode(this)">
+                <div class="node-name">🌍 CF 国外节点 3</div>
+                <div class="node-url">cdn2.yunyi.cfd</div>
+              </div>
+            </div>
+
+            <div class="wizard-buttons">
+              <button class="btn" onclick="wizardPrev(1)">← 上一步</button>
+              <div style="flex:1;"></div>
+              <button class="btn primary" onclick="wizardNext(3)">下一步 →</button>
+            </div>
+          </div>
+
+          <!-- Step 3: Channels (Optional) -->
+          <div class="wizard-step" id="wizard-step-3">
+            <h2>第 3 步：聊天渠道（可选）</h2>
+            <p class="hint">先跳过也行，WebChat 开箱即用</p>
+
+            <div class="wizard-cards">
+              <div class="wizard-card" id="wz-ch-telegram" onclick="toggleWizardChannel('telegram')">
+                <div class="wizard-card-header">
+                  <span class="wizard-card-icon">📱</span>
+                  <div>
+                    <div class="wizard-card-title">Telegram</div>
+                    <div class="wizard-card-desc">最简单，推荐</div>
+                  </div>
+                </div>
+                <div class="wizard-card-body">
+                  <div class="form-group">
+                    <label>Bot Token</label>
+                    <input type="password" id="wz-telegram-token" placeholder="123456:ABC-DEF...">
+                    <span class="help-text">从 @BotFather 获取</span>
+                  </div>
+                </div>
+              </div>
+
+              <div class="wizard-card" id="wz-ch-discord" onclick="toggleWizardChannel('discord')">
+                <div class="wizard-card-header">
+                  <span class="wizard-card-icon">🎮</span>
+                  <div>
+                    <div class="wizard-card-title">Discord</div>
+                    <div class="wizard-card-desc">从 Discord Developer Portal 获取 Token</div>
+                  </div>
+                </div>
+                <div class="wizard-card-body">
+                  <div class="form-group">
+                    <label>Bot Token</label>
+                    <input type="password" id="wz-discord-token" placeholder="your-bot-token">
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div class="wizard-buttons">
+              <button class="btn" onclick="wizardPrev(2)">← 上一步</button>
+              <div style="flex:1;"></div>
+              <button class="btn" onclick="finishWizard()">跳过，直接完成</button>
+              <button class="btn primary" onclick="finishWizard()">🚀 完成配置</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ═══════ Models Page ═══════ -->
+      <div id="page-models" class="page">
+        <div class="page-header">
+          <h1>🧠 模型管理</h1>
+          <button class="btn primary" onclick="showDialog('add-provider-dialog')">+ 添加 Provider</button>
+        </div>
+
+        <div class="section-card" id="models-current">
+          <h3>当前模型配置</h3>
+          <div class="info-row">
+            <span class="info-label">主模型</span>
+            <span class="info-value" id="models-primary">—</span>
+          </div>
+          <div class="info-row">
+            <span class="info-label">Fallback 链</span>
+            <span class="info-value" id="models-fallbacks">—</span>
+          </div>
+        </div>
+
+        <div id="provider-list" class="provider-list"></div>
+
+        <!-- Add Provider Dialog -->
+        <div id="add-provider-dialog" class="dialog-overlay">
+          <div class="dialog">
+            <div class="dialog-header">
+              <h3>添加 Provider</h3>
+              <button class="btn-close" onclick="hideDialog('add-provider-dialog')">✕</button>
+            </div>
+            <div class="dialog-body">
+              <div class="form-group">
+                <label>Provider ID</label>
+                <input type="text" id="new-provider-id" placeholder="例如: my-openai">
+                <span class="help-text">唯一标识符，只能用英文、数字和连字符</span>
+              </div>
+              <div class="form-group">
+                <label>API 格式</label>
+                <select id="new-provider-api">
+                  <option value="anthropic-messages">Anthropic Messages (Claude 中转)</option>
+                  <option value="openai-responses">OpenAI Responses (GPT/Codex 中转)</option>
+                  <option value="openai-chat">OpenAI Chat Completions</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label>Base URL</label>
+                <input type="text" id="new-provider-url" placeholder="https://api.example.com/v1">
+              </div>
+              <div class="form-group">
+                <label>API Key</label>
+                <input type="password" id="new-provider-key" placeholder="你的 API Key / 卡密">
+              </div>
+              <div class="form-group">
+                <label>默认模型 ID</label>
+                <input type="text" id="new-provider-model-id" placeholder="例如: claude-opus-4-6">
+              </div>
+              <div class="form-group">
+                <label style="display:flex;align-items:center;gap:6px;cursor:pointer;">
+                  <input type="checkbox" id="new-provider-set-primary" style="width:auto;"> 设为主模型
+                </label>
+              </div>
+            </div>
+            <div class="dialog-footer">
+              <button class="btn" onclick="hideDialog('add-provider-dialog')">取消</button>
+              <button class="btn primary" onclick="addProvider()">添加</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ═══════ Channels Page ═══════ -->
+      <div id="page-channels" class="page">
+        <div class="page-header">
+          <h1>💬 渠道管理</h1>
+          <button class="btn primary" onclick="showDialog('add-channel-dialog')">+ 添加渠道</button>
+        </div>
+
+        <div id="channel-list" class="channel-list-manage"></div>
+
+        <!-- Add Channel Dialog -->
+        <div id="add-channel-dialog" class="dialog-overlay">
+          <div class="dialog">
+            <div class="dialog-header">
+              <h3>添加渠道</h3>
+              <button class="btn-close" onclick="hideDialog('add-channel-dialog')">✕</button>
+            </div>
+            <div class="dialog-body">
+              <div class="form-group">
+                <label>渠道类型</label>
+                <select id="new-channel-type" onchange="onChannelTypeChange()">
+                  <option value="telegram">Telegram</option>
+                  <option value="discord">Discord</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label>Bot Token</label>
+                <input type="password" id="new-channel-token" placeholder="你的 Bot Token">
+                <span class="help-text" id="new-channel-help">从 @BotFather 获取</span>
+              </div>
+              <div class="form-group" id="channel-allowed-users-group">
+                <label>允许的用户 (可选)</label>
+                <input type="text" id="new-channel-allowed-users" placeholder="用户ID，多个用逗号分隔">
+                <span class="help-text">留空则所有人可用</span>
+              </div>
+            </div>
+            <div class="dialog-footer">
+              <button class="btn" onclick="hideDialog('add-channel-dialog')">取消</button>
+              <button class="btn primary" onclick="addChannel()">添加</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ═══════ Settings Page ═══════ -->
+      <div id="page-settings" class="page">
+        <h1>⚙️ 配置编辑器</h1>
+
+        <div class="settings-section">
+          <p class="hint">直接编辑 openclaw.json，修改后需重启 Gateway 生效</p>
+          <div class="json-editor-container">
+            <textarea id="json-editor" class="json-editor" spellcheck="false" placeholder="加载中..."></textarea>
+            <div id="json-editor-error" class="json-error" style="display:none;"></div>
+          </div>
+          <div class="settings-actions">
+            <button class="btn" onclick="loadJsonEditor()">🔄 重新加载</button>
+            <button class="btn" onclick="formatJsonEditor()">📐 格式化</button>
+            <button class="btn primary" onclick="saveJsonEditor()">💾 保存配置</button>
+            <button class="btn success" onclick="saveAndRestart()">💾 保存并重启</button>
+          </div>
+        </div>
+
+        <div class="settings-section">
+          <h3>关于</h3>
+          <div class="section-card">
+            <div class="info-row">
+              <span class="info-label">配置文件</span>
+              <span class="info-value">~/.openclaw/openclaw.json</span>
+            </div>
+            <div class="info-row">
+              <span class="info-label">工作目录</span>
+              <span class="info-value">~/.openclaw/workspace</span>
+            </div>
+            <div class="info-row">
+              <span class="info-label">Web Panel 端口</span>
+              <span class="info-value">5338</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ═══════ Logs Page ═══════ -->
+      <div id="page-logs" class="page">
+        <div class="log-header">
+          <h1>📋 Gateway 日志</h1>
+          <div class="log-controls">
+            <label class="auto-refresh-toggle">
+              <input type="checkbox" id="log-auto-refresh" checked onchange="toggleLogAutoRefresh()">
+              自动刷新
+            </label>
+            <button class="btn small" onclick="loadLogs()">🔄 刷新</button>
+          </div>
+        </div>
+        <pre id="log-output" class="log-box">(加载中...)</pre>
+      </div>
+
+    </main>
+  </div>
+
+  <!-- Loading Overlay -->
+  <div id="loading-overlay" class="loading-overlay">
+    <div class="loading-content">
+      <div class="loading-spinner"></div>
+      <div class="loading-text" id="loading-text">处理中...</div>
+    </div>
+  </div>
+
+  <script src="js/app.js"></script>
+</body>
+</html>

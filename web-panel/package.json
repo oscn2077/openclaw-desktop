@@ -1,0 +1,17 @@
+{
+  "name": "openclaw-web-panel",
+  "version": "0.1.0",
+  "description": "OpenClaw Web 管理面板 — 适用于 Linux 服务器（无 GUI 环境）",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js --dev"
+  },
+  "dependencies": {
+    "express": "^4.21.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "license": "MIT"
+}
