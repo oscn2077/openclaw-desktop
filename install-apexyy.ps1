@@ -1,4 +1,4 @@
-# OpenClaw ApexYY 专版 — Windows 安装脚本
+# OpenClaw ApexYY 专版 — Windows 安装脚本 (加固版)
 # 用法: 右键以管理员身份运行 PowerShell，粘贴以下命令:
 #   irm https://raw.githubusercontent.com/oscn2077/openclaw-desktop/main/install-apexyy.ps1 | iex
 #
@@ -46,6 +46,25 @@ $NodeNames = @{
     6 = "备用节点2"
 }
 
+# ========== 网络连通性检查 ==========
+Step "网络连通性检查"
+$reachable = $false
+@("https://yunyi.rdzhvip.com", "https://yunyi.cfd") | ForEach-Object {
+    try {
+        $response = Invoke-WebRequest -Uri $_ -TimeoutSec 10 -UseBasicParsing -ErrorAction SilentlyContinue
+        Info "$_ 可达"
+        $reachable = $true
+    } catch {
+        Warn "$_ 不可达"
+    }
+}
+if (-not $reachable) {
+    Err "所有 API 节点均不可达！请检查网络连接。"
+    $continue = Read-Host "[?] 是否继续安装? (y/N)"
+    if ($continue -ne "y") { exit 1 }
+    Warn "继续安装，但 API 调用可能失败"
+}
+
 # ========== 检查 Node.js ==========
 Step "检查 Node.js"
 $nodeVer = $null
@@ -67,7 +86,6 @@ if (-not $nodeVer) {
     if ($hasWinget) {
         winget install OpenJS.NodeJS.LTS --accept-package-agreements --accept-source-agreements
     } else {
-        # 没有 winget，直接下载 Node.js 安装包
         Warn "未找到 winget，尝试直接下载 Node.js..."
         $nodeUrl = "https://nodejs.org/dist/v22.15.0/node-v22.15.0-x64.msi"
         $nodeMsi = Join-Path $env:TEMP "node-install.msi"
@@ -114,7 +132,6 @@ Info "Git $(git --version 2>$null)"
 
 # ========== 安装 OpenClaw ==========
 Step "安装 OpenClaw"
-# 配置国内镜像
 npm config set registry https://registry.npmmirror.com/ 2>$null
 $env:SHARP_IGNORE_GLOBAL_LIBVIPS = "1"
 npm install -g openclaw@latest 2>&1 | Select-Object -Last 3
@@ -125,6 +142,21 @@ Step "初始化 OpenClaw"
 openclaw onboard --non-interactive --accept-risk --mode local --auth-choice skip `
     --gateway-port 18789 --gateway-bind loopback --gateway-auth token `
     --skip-channels --skip-skills --skip-health --skip-ui --install-daemon 2>&1 | Select-Object -Last 3
+
+# 检查配置文件是否生成
+$configPath = Join-Path $env:USERPROFILE ".openclaw\openclaw.json"
+if (-not (Test-Path $configPath)) {
+    Warn "openclaw onboard 未生成配置文件，手动创建..."
+    $configDir = Join-Path $env:USERPROFILE ".openclaw"
+    if (-not (Test-Path $configDir)) { New-Item -ItemType Directory -Path $configDir -Force | Out-Null }
+    @{
+        gateway = @{ port = 18789; bind = "loopback"; auth = "token" }
+        models = @{ mode = "merge"; providers = @{} }
+        agents = @{ defaults = @{} }
+        channels = @{}
+    } | ConvertTo-Json -Depth 5 | Set-Content $configPath -Encoding UTF8
+    Info "已手动创建 openclaw.json"
+}
 
 # ========== 交互式输入 (如果没传参数) ==========
 if (-not $ClaudeKey -and -not $CodexKey) {
@@ -143,16 +175,20 @@ if (-not $ClaudeKey -and -not $CodexKey) {
         "1" {
             $ClaudeKey = Read-Host "[?] 请输入 Claude 卡密"
             if (-not $ClaudeKey) { Err "卡密不能为空"; exit 1 }
+            if ($ClaudeKey.Length -lt 8) { Err "卡密长度过短，看起来不像有效的卡密"; exit 1 }
         }
         "2" {
             $CodexKey = Read-Host "[?] 请输入 Codex 卡密"
             if (-not $CodexKey) { Err "卡密不能为空"; exit 1 }
+            if ($CodexKey.Length -lt 8) { Err "卡密长度过短，看起来不像有效的卡密"; exit 1 }
         }
         "3" {
             $ClaudeKey = Read-Host "[?] 请输入 Claude 卡密"
             if (-not $ClaudeKey) { Err "Claude 卡密不能为空"; exit 1 }
+            if ($ClaudeKey.Length -lt 8) { Err "Claude 卡密长度过短"; exit 1 }
             $CodexKey = Read-Host "[?] 请输入 Codex 卡密"
             if (-not $CodexKey) { Err "Codex 卡密不能为空"; exit 1 }
+            if ($CodexKey.Length -lt 8) { Err "Codex 卡密长度过短"; exit 1 }
         }
     }
 
@@ -185,7 +221,6 @@ if ($Primary -match "^gpt|^o3|^o4") {
 # ========== 写入配置 ==========
 Step "写入 ApexYY 模型配置"
 
-$configPath = Join-Path $env:USERPROFILE ".openclaw\openclaw.json"
 $config = Get-Content $configPath -Raw | ConvertFrom-Json
 
 # 确保 models.providers 存在
@@ -267,18 +302,49 @@ if ($DiscordToken) {
     Info "Discord 渠道已添加"
 }
 
-# ========== 启动 ==========
+# ========== 启动 + 验证 ==========
 Step "启动 Gateway"
 try { openclaw gateway restart 2>&1 | Out-Null } catch {}
 try { openclaw gateway start 2>&1 | Out-Null } catch {}
 Start-Sleep -Seconds 2
 
-Step "安装完成! 🎉"
+# 验证启动状态
+$gwStatus = openclaw gateway status 2>&1
+if ($gwStatus -match "running|online|listening") {
+    Info "Gateway 运行中 ✓"
+} else {
+    Warn "Gateway 可能未正常启动，请检查: openclaw gateway status"
+}
+
+# ========== 安装摘要 ==========
 Write-Host ""
-Write-Host "  常用命令:" -ForegroundColor White
+Write-Host "╔══════════════════════════════════════════════════╗" -ForegroundColor Green
+Write-Host "║          🎉 OpenClaw 安装完成!                  ║" -ForegroundColor Green
+Write-Host "╚══════════════════════════════════════════════════╝" -ForegroundColor Green
+Write-Host ""
+Write-Host "  📦 已安装:" -ForegroundColor White
+Write-Host "    • Node.js $(node -v 2>$null)"
+Write-Host "    • OpenClaw $(openclaw --version 2>$null)"
+Write-Host ""
+Write-Host "  ⚙️  已配置:" -ForegroundColor White
+Write-Host "    • 节点: $($NodeNames[$Node]) ($BaseUrl)"
+Write-Host "    • 主模型: $PrimaryRef"
+if ($ClaudeKey) { Write-Host "    • Claude Provider: 已配置" -ForegroundColor Green }
+if ($CodexKey) { Write-Host "    • Codex Provider: 已配置" -ForegroundColor Green }
+Write-Host ""
+Write-Host "  🌐 WebChat: http://localhost:18789" -ForegroundColor Cyan
+Write-Host "     在浏览器中打开即可开始对话" -ForegroundColor Gray
+Write-Host ""
+Write-Host "  📋 常用命令:" -ForegroundColor White
 Write-Host "    openclaw gateway status    — 查看状态"
 Write-Host "    openclaw gateway restart   — 重启"
+Write-Host "    openclaw gateway stop      — 停止"
+Write-Host "    openclaw doctor            — 健康检查"
 Write-Host ""
-Write-Host "  WebChat: http://localhost:18789" -ForegroundColor White
-Write-Host "  额度查询: https://yunyi.rdzhvip.com/user" -ForegroundColor White
+Write-Host "  💰 额度查询: https://yunyi.rdzhvip.com/user" -ForegroundColor Cyan
+Write-Host ""
+Write-Host "  🗑️  卸载方法:" -ForegroundColor White
+Write-Host "    1. openclaw gateway stop"
+Write-Host "    2. npm uninstall -g openclaw"
+Write-Host "    3. Remove-Item ~\.openclaw -Recurse -Force"
 Write-Host ""
