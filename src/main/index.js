@@ -192,35 +192,45 @@ ipcMain.handle('generate-config', async (event, wizardData) => {
     if (model.type === 'proxy') {
       // Third-party proxy (中转)
       const providerId = model.providerId;
-      config.models.providers[providerId] = {
+      const providerConfig = {
         baseUrl: model.baseUrl,
+        apiKey: model.apiKey,
         auth: 'api-key',
         api: model.apiFormat || 'anthropic-messages',
-        apiKey: `\${${providerId.toUpperCase().replace(/-/g, '_')}_API_KEY}`,
-        models: model.models.map(m => ({
+        headers: {},
+        authHeader: false,
+      };
+
+      // Claude proxy: empty models array (auto-detected)
+      // OpenAI/Codex proxy: need explicit model declarations
+      if (model.apiFormat === 'anthropic-messages') {
+        providerConfig.models = [];
+      } else {
+        providerConfig.models = (model.models || []).map(m => ({
           id: m.id,
           name: m.name,
-          contextWindow: m.contextWindow || 200000,
-          maxTokens: m.maxTokens || 8192,
-        })),
-      };
-      envVars[`${providerId.toUpperCase().replace(/-/g, '_')}_API_KEY`] = model.apiKey;
+          reasoning: m.reasoning || false,
+          input: m.input || ['text'],
+          cost: m.cost || { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+          contextWindow: m.contextWindow || 128000,
+          maxTokens: m.maxTokens || 32768,
+        }));
+      }
+
+      config.models.providers[providerId] = providerConfig;
 
       // Set primary model
-      if (!config.agents.defaults.model.primary) {
-        config.agents.defaults.model.primary = `${providerId}/${model.models[0].id}`;
-      } else {
-        config.agents.defaults.model.fallbacks.push(`${providerId}/${model.models[0].id}`);
-      }
-
-      // Add to models allowlist
-      for (const m of model.models) {
-        config.agents.defaults.models[`${providerId}/${m.id}`] = {
-          alias: m.name,
-        };
+      const primaryModelId = model.primaryModelId || (model.models?.[0]?.id);
+      if (primaryModelId) {
+        const modelRef = `${providerId}/${primaryModelId}`;
+        if (!config.agents.defaults.model.primary) {
+          config.agents.defaults.model.primary = modelRef;
+        } else {
+          config.agents.defaults.model.fallbacks.push(modelRef);
+        }
       }
     } else if (model.type === 'official') {
-      // Official API — use built-in provider
+      // Official API — use built-in provider, store key in .env
       const envKey = model.envKey;
       envVars[envKey] = model.apiKey;
 

@@ -160,11 +160,12 @@ function collectModelData() {
       if (!baseUrl) return { error: 'Claude 中转模式需要填写中转地址' };
       models.push({
         type: 'proxy',
-        providerId: 'claude-proxy',
+        providerId: 'yunyi-claude',
         baseUrl,
         apiFormat: 'anthropic-messages',
         apiKey,
-        models: [{ id: model, name: model, contextWindow: 200000, maxTokens: 8192 }],
+        primaryModelId: model,
+        models: [],  // Claude proxy auto-detects models
       });
     } else {
       models.push({
@@ -176,24 +177,35 @@ function collectModelData() {
     }
   }
 
-  // Collect OpenAI
-  if (document.getElementById('enable-openai')?.checked) {
-    const type = document.getElementById('openai-type').value;
-    const apiKey = document.getElementById('openai-api-key').value;
-    const model = document.getElementById('openai-model').value;
+  // Collect Codex (OpenAI)
+  if (document.getElementById('enable-codex')?.checked) {
+    const type = document.getElementById('codex-type').value;
+    const apiKey = document.getElementById('codex-api-key').value;
+    const model = document.getElementById('codex-model').value;
 
-    if (!apiKey) return { error: 'OpenAI 已启用但未填写 API Key' };
+    if (!apiKey) return { error: 'Codex 已启用但未填写 API Key' };
 
     if (type === 'proxy') {
-      const baseUrl = document.getElementById('openai-base-url').value;
-      if (!baseUrl) return { error: 'OpenAI 中转模式需要填写中转地址' };
+      const baseUrl = document.getElementById('codex-base-url').value;
+      if (!baseUrl) return { error: 'Codex 中转模式需要填写中转地址' };
+
+      // Build model declarations for OpenAI/Codex proxy
+      const codexModels = {
+        'gpt-5.2': { id: 'gpt-5.2', name: 'GPT 5.2', reasoning: true, input: ['text', 'image'], contextWindow: 128000, maxTokens: 32768 },
+        'gpt-codex-5.3': { id: 'gpt-codex-5.3', name: 'GPT Codex 5.3', reasoning: true, input: ['text', 'image'], contextWindow: 128000, maxTokens: 32768 },
+        'gpt-4.1': { id: 'gpt-4.1', name: 'GPT 4.1', reasoning: false, input: ['text', 'image'], contextWindow: 128000, maxTokens: 32768 },
+        'o3': { id: 'o3', name: 'o3', reasoning: true, input: ['text', 'image'], contextWindow: 200000, maxTokens: 100000 },
+        'o4-mini': { id: 'o4-mini', name: 'o4-mini', reasoning: true, input: ['text', 'image'], contextWindow: 200000, maxTokens: 100000 },
+      };
+
       models.push({
         type: 'proxy',
-        providerId: 'openai-proxy',
+        providerId: 'yunyi-codex',
         baseUrl,
-        apiFormat: 'openai-completions',
+        apiFormat: 'openai-responses',
         apiKey,
-        models: [{ id: model, name: model, contextWindow: 128000, maxTokens: 8192 }],
+        primaryModelId: model,
+        models: [codexModels[model] || { id: model, name: model, reasoning: true, input: ['text', 'image'], contextWindow: 128000, maxTokens: 32768 }],
       });
     } else {
       models.push({

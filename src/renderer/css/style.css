@@ -250,6 +250,13 @@ body {
 
 .help-link:hover { text-decoration: underline; }
 
+.help-text {
+  font-size: 12px;
+  color: var(--text-dim);
+  margin-top: 4px;
+  display: block;
+}
+
 /* ── Log Box ── */
 .log-box {
   background: #0a0a1a;

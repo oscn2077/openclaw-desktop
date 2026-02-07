@@ -88,21 +88,23 @@
                   <div class="form-group">
                     <label>接入方式</label>
                     <select id="claude-type" onchange="toggleProxyFields('claude')">
+                      <option value="proxy" selected>中转 API</option>
                       <option value="official">官方 API</option>
-                      <option value="proxy">中转 API</option>
                     </select>
                   </div>
-                  <div class="form-group proxy-field" id="claude-proxy-url" style="display:none;">
+                  <div class="form-group proxy-field" id="claude-proxy-url">
                     <label>中转地址</label>
-                    <input type="text" id="claude-base-url" placeholder="https://your-proxy.com/claude">
+                    <input type="text" id="claude-base-url" placeholder="https://yunyi.rdzhvip.com/claude" value="">
+                    <span class="help-text">国内用 yunyi.rdzhvip.com/claude，国外用 yunyi.cfd/claude</span>
                   </div>
                   <div class="form-group">
-                    <label>API Key</label>
-                    <input type="password" id="claude-api-key" placeholder="sk-...">
+                    <label>API Key（卡密）</label>
+                    <input type="password" id="claude-api-key" placeholder="你的卡密">
                   </div>
                   <div class="form-group">
                     <label>默认模型</label>
                     <select id="claude-model">
+                      <option value="claude-opus-4-5">Claude Opus 4.5</option>
                       <option value="claude-opus-4-6">Claude Opus 4.6</option>
                       <option value="claude-sonnet-4-5">Claude Sonnet 4.5</option>
                     </select>
@@ -110,30 +112,32 @@
                 </div>
               </div>
 
-              <!-- OpenAI -->
-              <div class="model-card" id="model-openai">
+              <!-- Codex (OpenAI) -->
+              <div class="model-card" id="model-codex">
                 <div class="model-header">
-                  <label><input type="checkbox" id="enable-openai" onchange="toggleModel('openai')"> OpenAI</label>
+                  <label><input type="checkbox" id="enable-codex" onchange="toggleModel('codex')"> Codex (OpenAI)</label>
                 </div>
                 <div class="model-body" style="display:none;">
                   <div class="form-group">
                     <label>接入方式</label>
-                    <select id="openai-type" onchange="toggleProxyFields('openai')">
+                    <select id="codex-type" onchange="toggleProxyFields('codex')">
+                      <option value="proxy" selected>中转 API</option>
                       <option value="official">官方 API</option>
-                      <option value="proxy">中转 API</option>
                     </select>
                   </div>
-                  <div class="form-group proxy-field" id="openai-proxy-url" style="display:none;">
+                  <div class="form-group proxy-field" id="codex-proxy-url">
                     <label>中转地址</label>
-                    <input type="text" id="openai-base-url" placeholder="https://your-proxy.com/v1">
+                    <input type="text" id="codex-base-url" placeholder="https://yunyi.rdzhvip.com/codex" value="">
+                    <span class="help-text">国内用 yunyi.rdzhvip.com/codex，国外用 yunyi.cfd/codex</span>
                   </div>
                   <div class="form-group">
-                    <label>API Key</label>
-                    <input type="password" id="openai-api-key" placeholder="sk-...">
+                    <label>API Key（卡密）</label>
+                    <input type="password" id="codex-api-key" placeholder="你的卡密">
+                    <span class="help-text">Claude 和 Codex 的卡密不互通，看你买的是哪个</span>
                   </div>
                   <div class="form-group">
                     <label>默认模型</label>
-                    <select id="openai-model">
+                    <select id="codex-model">
                       <option value="gpt-5.2">GPT-5.2</option>
                       <option value="gpt-codex-5.3">GPT Codex 5.3</option>
                       <option value="gpt-4.1">GPT-4.1</option>
