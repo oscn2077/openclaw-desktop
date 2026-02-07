@@ -358,16 +358,17 @@ function getOSName() {
 }
 
 // ── Restart Gateway ──
-ipcMain.handle('restart-gateway', async (event) => {
+ipcMain.handle('restart-gateway', async () => {
   stopGateway();
-  await new Promise(r => setTimeout(r, 500));
-  // Re-invoke start-gateway
-  const result = await new Promise((resolve) => {
-    const handler = ipcMain.handler?.['start-gateway'];
-    // Just trigger start via the same logic
-    resolve({ restarting: true });
-  });
-  return result;
+  await new Promise(r => setTimeout(r, 1000));
+  try {
+    const gw = spawn('openclaw', ['gateway', 'start'], { stdio: 'pipe', detached: true });
+    gw.unref();
+    gatewayProcess = gw;
+    return { success: true, restarted: true };
+  } catch (e) {
+    return { success: false, error: e.message };
+  }
 });
 
 // ── Read Config File Raw ──
