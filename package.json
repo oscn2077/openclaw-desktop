@@ -1,45 +1,84 @@
 {
   "name": "openclaw-desktop",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "OpenClaw Desktop — ApexYY 专版，一键部署，无脑上手",
+  "author": "OpenClaw Team <oscn2077>",
+  "license": "MIT",
+  "homepage": "https://github.com/oscn2077/openclaw-desktop",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/oscn2077/openclaw-desktop.git"
+  },
   "main": "src/main/index.js",
   "scripts": {
     "start": "electron .",
     "dev": "electron . --dev",
+    "pack": "electron-builder --dir",
+    "build": "electron-builder",
     "build:win": "electron-builder --win",
     "build:mac": "electron-builder --mac",
     "build:linux": "electron-builder --linux",
     "build:all": "electron-builder --win --mac --linux"
   },
   "build": {
-    "appId": "com.zhizi.openclaw-desktop",
+    "appId": "com.openclaw.desktop",
     "productName": "OpenClaw Desktop",
+    "copyright": "Copyright © 2025-2026 OpenClaw Team",
     "directories": {
-      "output": "dist"
+      "output": "dist",
+      "buildResources": "assets"
     },
     "files": [
       "src/**/*",
       "assets/**/*",
       "node_modules/**/*"
     ],
+    "extraMetadata": {
+      "main": "src/main/index.js"
+    },
     "win": {
-      "target": ["nsis"],
+      "target": [
+        {
+          "target": "nsis",
+          "arch": ["x64", "arm64"]
+        }
+      ],
       "icon": "assets/icon.ico"
     },
     "mac": {
-      "target": ["dmg"],
-      "icon": "assets/icon.icns"
+      "target": [
+        {
+          "target": "dmg",
+          "arch": ["x64", "arm64"]
+        }
+      ],
+      "icon": "assets/icon.icns",
+      "category": "public.app-category.developer-tools"
     },
     "linux": {
-      "target": ["AppImage"],
-      "icon": "assets/icon.png"
+      "target": [
+        {
+          "target": "AppImage",
+          "arch": ["x64", "arm64"]
+        }
+      ],
+      "icon": "assets/icon.png",
+      "category": "Development"
     },
     "nsis": {
-      "oneClick": true,
-      "allowToChangeInstallationDirectory": false,
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
-      "createStartMenuShortcut": true
-    }
+      "createStartMenuShortcut": true,
+      "shortcutName": "OpenClaw Desktop"
+    },
+    "dmg": {
+      "contents": [
+        { "x": 130, "y": 220 },
+        { "x": 410, "y": 220, "type": "link", "path": "/Applications" }
+      ]
+    },
+    "publish": null
   },
   "dependencies": {
     "express": "^4.21.0",

@@ -12,23 +12,23 @@
     <nav id="sidebar">
       <div class="logo">🦞 OpenClaw</div>
       <div class="nav-items">
-        <button class="nav-item active" data-page="status" onclick="showPage('status')">
-          <span class="icon">📊</span> 状态
+        <button class="nav-item active" data-page="status" onclick="showPage('status')" title="">
+          <span class="icon">📊</span> <span class="nav-label">状态</span>
         </button>
-        <button class="nav-item" data-page="models" onclick="showPage('models')">
-          <span class="icon">🧠</span> 模型
+        <button class="nav-item" data-page="models" onclick="showPage('models')" title="">
+          <span class="icon">🧠</span> <span class="nav-label">模型</span>
         </button>
-        <button class="nav-item" data-page="channels" onclick="showPage('channels')">
-          <span class="icon">💬</span> 渠道
+        <button class="nav-item" data-page="channels" onclick="showPage('channels')" title="">
+          <span class="icon">💬</span> <span class="nav-label">渠道</span>
         </button>
-        <button class="nav-item" data-page="chat" onclick="showPage('chat')">
-          <span class="icon">🗨️</span> 对话
+        <button class="nav-item" data-page="chat" onclick="showPage('chat')" title="">
+          <span class="icon">🗨️</span> <span class="nav-label">对话</span>
         </button>
-        <button class="nav-item" data-page="logs" onclick="showPage('logs')">
-          <span class="icon">📋</span> 日志
+        <button class="nav-item" data-page="logs" onclick="showPage('logs')" title="">
+          <span class="icon">📋</span> <span class="nav-label">日志</span>
         </button>
-        <button class="nav-item" data-page="settings" onclick="showPage('settings')">
-          <span class="icon">⚙️</span> 设置
+        <button class="nav-item" data-page="settings" onclick="showPage('settings')" title="">
+          <span class="icon">⚙️</span> <span class="nav-label">设置</span>
         </button>
       </div>
       <div class="nav-footer">
@@ -47,6 +47,24 @@
           <div class="wizard-header">
             <h1>🦞 欢迎使用 OpenClaw Desktop</h1>
             <p>让我们花 2 分钟完成初始设置</p>
+          </div>
+
+          <!-- Progress Bar -->
+          <div class="wizard-progress">
+            <div class="progress-step active" id="progress-step-1">
+              <div class="progress-dot">1</div>
+              <span class="progress-label">环境检测</span>
+            </div>
+            <div class="progress-line" id="progress-line-1"></div>
+            <div class="progress-step" id="progress-step-2">
+              <div class="progress-dot">2</div>
+              <span class="progress-label">模型配置</span>
+            </div>
+            <div class="progress-line" id="progress-line-2"></div>
+            <div class="progress-step" id="progress-step-3">
+              <div class="progress-dot">3</div>
+              <span class="progress-label">渠道设置</span>
+            </div>
           </div>
 
           <!-- Step 1: Environment Check -->
@@ -70,7 +88,11 @@
               </div>
             </div>
             <div id="env-actions" style="display:none;"></div>
-            <button class="btn primary" id="btn-step1-next" onclick="wizardNext(2)" disabled>下一步</button>
+            <div class="wizard-buttons">
+              <button class="btn primary" id="btn-step1-next" onclick="wizardNext(2)" disabled>
+                下一步 <span class="btn-arrow">→</span>
+              </button>
+            </div>
           </div>
 
           <!-- Step 2: Model Setup -->
@@ -100,6 +122,7 @@
                   <div class="form-group">
                     <label>API Key（卡密）</label>
                     <input type="password" id="claude-api-key" placeholder="你的卡密">
+                    <span class="validation-msg" id="claude-api-key-error"></span>
                   </div>
                   <div class="form-group">
                     <label>默认模型</label>
@@ -134,6 +157,7 @@
                     <label>API Key（卡密）</label>
                     <input type="password" id="codex-api-key" placeholder="你的卡密">
                     <span class="help-text">Claude 和 Codex 的卡密不互通，看你买的是哪个</span>
+                    <span class="validation-msg" id="codex-api-key-error"></span>
                   </div>
                   <div class="form-group">
                     <label>默认模型</label>
@@ -158,6 +182,7 @@
                     <label>API Key (Google AI Studio)</label>
                     <input type="password" id="gemini-api-key" placeholder="AIzaSy...">
                     <a href="#" onclick="api.openExternal('https://aistudio.google.com/apikey'); return false;" class="help-link">获取免费 API Key →</a>
+                    <span class="validation-msg" id="gemini-api-key-error"></span>
                   </div>
                   <div class="form-group">
                     <label>默认模型</label>
@@ -180,6 +205,7 @@
                     <label>API Key</label>
                     <input type="password" id="glm-api-key" placeholder="your-api-key">
                     <a href="#" onclick="api.openExternal('https://open.bigmodel.cn/'); return false;" class="help-link">获取 API Key →</a>
+                    <span class="validation-msg" id="glm-api-key-error"></span>
                   </div>
                   <div class="form-group">
                     <label>默认模型</label>
@@ -192,9 +218,21 @@
               </div>
             </div>
 
+            <!-- Test Connection Button -->
+            <div class="wizard-test-connection" style="margin-top:16px;">
+              <button class="btn" id="btn-test-connection" onclick="testWizardConnection()">
+                <span class="btn-icon">🔗</span> 测试连接
+              </button>
+              <span id="test-connection-result" class="test-result"></span>
+            </div>
+
             <div class="wizard-buttons">
-              <button class="btn" onclick="wizardNext(1)">上一步</button>
-              <button class="btn primary" id="btn-step2-next" onclick="wizardNext(3)">下一步</button>
+              <button class="btn" onclick="wizardNext(1)">
+                <span class="btn-arrow">←</span> 上一步
+              </button>
+              <button class="btn primary" id="btn-step2-next" onclick="wizardNext(3)">
+                下一步 <span class="btn-arrow">→</span>
+              </button>
             </div>
           </div>
 
@@ -249,7 +287,9 @@
             </div>
 
             <div class="wizard-buttons">
-              <button class="btn" onclick="wizardNext(2)">上一步</button>
+              <button class="btn" onclick="wizardNext(2)">
+                <span class="btn-arrow">←</span> 上一步
+              </button>
               <button class="btn primary" onclick="finishWizard()">🚀 完成设置</button>
               <button class="btn" onclick="finishWizard()">跳过，直接开始</button>
             </div>
@@ -295,8 +335,41 @@
           </div>
         </div>
 
+        <!-- System Info Section -->
+        <div class="section-card" id="status-sysinfo" style="margin-top:24px;">
+          <div class="section-header">
+            <h3>系统信息</h3>
+            <button class="btn small" id="btn-copy-diagnostics" onclick="copyDiagnostics()">📋 复制诊断信息</button>
+          </div>
+          <div class="info-row">
+            <span class="info-label">Node.js 版本</span>
+            <span class="info-value" id="sysinfo-node">-</span>
+          </div>
+          <div class="info-row">
+            <span class="info-label">OpenClaw 版本</span>
+            <span class="info-value" id="sysinfo-openclaw">-</span>
+          </div>
+          <div class="info-row">
+            <span class="info-label">操作系统</span>
+            <span class="info-value" id="sysinfo-os">-</span>
+          </div>
+          <div class="info-row">
+            <span class="info-label">运行时间</span>
+            <span class="info-value" id="sysinfo-uptime">-</span>
+          </div>
+        </div>
+
         <!-- Provider Status List -->
         <div id="status-provider-list" style="margin-top:24px;"></div>
+
+        <!-- Gateway Logs Section -->
+        <div class="section-card" id="status-logs-section" style="margin-top:24px;">
+          <div class="section-header">
+            <h3>Gateway 日志（最近 50 行）</h3>
+            <button class="btn small" onclick="refreshStatusLogs()">🔄 刷新</button>
+          </div>
+          <pre id="status-log-output" class="log-box log-box-small"></pre>
+        </div>
       </div>
 
       <!-- Models Page -->
@@ -364,7 +437,7 @@
             </div>
             <div class="dialog-footer">
               <button class="btn" onclick="hideAddProviderDialog()">取消</button>
-              <button class="btn primary" onclick="addProvider()">添加</button>
+              <button class="btn primary" id="btn-add-provider" onclick="addProvider()">添加</button>
             </div>
           </div>
         </div>
@@ -408,7 +481,7 @@
             </div>
             <div class="dialog-footer">
               <button class="btn" onclick="hideAddChannelDialog()">取消</button>
-              <button class="btn primary" onclick="addChannel()">添加</button>
+              <button class="btn primary" id="btn-add-channel" onclick="addChannel()">添加</button>
             </div>
           </div>
         </div>
@@ -416,9 +489,20 @@
 
       <!-- Chat Page -->
       <div id="page-chat" class="page" style="display:none;">
-        <h1>🗨️ 对话</h1>
+        <div class="page-header">
+          <h1>🗨️ 对话</h1>
+          <div class="chat-toolbar">
+            <span class="chat-status" id="chat-status">
+              <span class="dot"></span>
+              <span class="chat-status-text">未连接</span>
+            </span>
+            <button class="btn small" onclick="openWebChatExternal()">
+              <span class="btn-icon">🌐</span> 在浏览器中打开
+            </button>
+          </div>
+        </div>
         <div id="chat-frame-container">
-          <iframe id="chat-frame" style="width:100%;height:500px;border:1px solid #333;border-radius:8px;"></iframe>
+          <iframe id="chat-frame" style="width:100%;height:calc(100vh - 140px);border:1px solid var(--border);border-radius:8px;"></iframe>
         </div>
       </div>
 
@@ -441,7 +525,7 @@
           </div>
           <div class="settings-actions">
             <button class="btn" onclick="loadJsonEditor()">重新加载</button>
-            <button class="btn primary" onclick="saveJsonEditor()">保存配置</button>
+            <button class="btn primary" id="btn-save-config" onclick="saveJsonEditor()">保存配置</button>
             <button class="btn" onclick="formatJsonEditor()">格式化</button>
           </div>
         </div>
@@ -461,6 +545,24 @@
     </main>
   </div>
 
+  <!-- Confirm Dialog (reusable) -->
+  <div id="confirm-dialog" class="dialog-overlay" style="display:none;">
+    <div class="dialog dialog-small">
+      <div class="dialog-header">
+        <h3 id="confirm-dialog-title">确认</h3>
+        <button class="btn-close" onclick="hideConfirmDialog(false)">✕</button>
+      </div>
+      <div class="dialog-body">
+        <p id="confirm-dialog-message"></p>
+      </div>
+      <div class="dialog-footer">
+        <button class="btn" onclick="hideConfirmDialog(false)">取消</button>
+        <button class="btn danger" id="confirm-dialog-ok" onclick="hideConfirmDialog(true)">确定</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="js/i18n.js"></script>
   <script src="js/app.js"></script>
 </body>
 </html>

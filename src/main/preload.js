@@ -23,6 +23,12 @@ contextBridge.exposeInMainWorld('api', {
   getGatewayUrl: () => ipcRenderer.invoke('get-gateway-url'),
   readGatewayLogs: () => ipcRenderer.invoke('read-gateway-logs'),
 
+  // System info
+  getSystemInfo: () => ipcRenderer.invoke('get-system-info'),
+
+  // Test connection
+  testConnection: (params) => ipcRenderer.invoke('test-connection', params),
+
   // Events
   onGatewayStatus: (cb) => ipcRenderer.on('gateway-status', (e, status) => cb(status)),
   onGatewayLog: (cb) => ipcRenderer.on('gateway-log', (e, log) => cb(log)),

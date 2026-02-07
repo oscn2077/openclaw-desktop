@@ -9,6 +9,7 @@ let mainWindow = null;
 let tray = null;
 let gatewayProcess = null;
 let gatewayStatus = 'stopped'; // stopped | starting | running | error
+let gatewayStartTime = null;
 
 // ── Paths ──
 const OPENCLAW_HOME = path.join(os.homedir(), '.openclaw');
@@ -316,6 +317,7 @@ ipcMain.handle('start-gateway', async () => {
     setTimeout(() => {
       if (!started) {
         gatewayStatus = 'running'; // assume running
+        gatewayStartTime = Date.now();
         mainWindow.webContents.send('gateway-status', gatewayStatus);
         resolve({ success: true });
       }
@@ -337,6 +339,7 @@ function stopGateway() {
     gatewayProcess = null;
   }
   gatewayStatus = 'stopped';
+  gatewayStartTime = null;
   if (mainWindow) {
     mainWindow.webContents.send('gateway-status', gatewayStatus);
   }
@@ -573,6 +576,3 @@ ipcMain.handle('get-system-info', async () => {
 
   return info;
 });
-
-// Track gateway start time
-let gatewayStartTime = null;
