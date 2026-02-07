@@ -143,9 +143,9 @@ function toggleChannel(name) {
   if (body) body.style.display = checked ? 'block' : 'none';
 }
 
-// ── Finish Wizard ──
-async function finishWizard() {
-  const wizardData = { models: [], channels: [] };
+// ── Collect Model Data ──
+function collectModelData() {
+  const models = [];
 
   // Collect Claude
   if (document.getElementById('enable-claude')?.checked) {
@@ -153,17 +153,21 @@ async function finishWizard() {
     const apiKey = document.getElementById('claude-api-key').value;
     const model = document.getElementById('claude-model').value;
 
+    if (!apiKey) return { error: 'Claude 已启用但未填写 API Key' };
+
     if (type === 'proxy') {
-      wizardData.models.push({
+      const baseUrl = document.getElementById('claude-base-url').value;
+      if (!baseUrl) return { error: 'Claude 中转模式需要填写中转地址' };
+      models.push({
         type: 'proxy',
         providerId: 'claude-proxy',
-        baseUrl: document.getElementById('claude-base-url').value,
+        baseUrl,
         apiFormat: 'anthropic-messages',
         apiKey,
         models: [{ id: model, name: model, contextWindow: 200000, maxTokens: 8192 }],
       });
     } else {
-      wizardData.models.push({
+      models.push({
         type: 'official',
         envKey: 'ANTHROPIC_API_KEY',
         apiKey,
@@ -178,17 +182,21 @@ async function finishWizard() {
     const apiKey = document.getElementById('openai-api-key').value;
     const model = document.getElementById('openai-model').value;
 
+    if (!apiKey) return { error: 'OpenAI 已启用但未填写 API Key' };
+
     if (type === 'proxy') {
-      wizardData.models.push({
+      const baseUrl = document.getElementById('openai-base-url').value;
+      if (!baseUrl) return { error: 'OpenAI 中转模式需要填写中转地址' };
+      models.push({
         type: 'proxy',
         providerId: 'openai-proxy',
-        baseUrl: document.getElementById('openai-base-url').value,
+        baseUrl,
         apiFormat: 'openai-completions',
         apiKey,
         models: [{ id: model, name: model, contextWindow: 128000, maxTokens: 8192 }],
       });
     } else {
-      wizardData.models.push({
+      models.push({
         type: 'official',
         envKey: 'OPENAI_API_KEY',
         apiKey,
@@ -200,8 +208,9 @@ async function finishWizard() {
   // Collect Gemini
   if (document.getElementById('enable-gemini')?.checked) {
     const apiKey = document.getElementById('gemini-api-key').value;
+    if (!apiKey) return { error: 'Gemini 已启用但未填写 API Key' };
     const model = document.getElementById('gemini-model').value;
-    wizardData.models.push({
+    models.push({
       type: 'official',
       envKey: 'GEMINI_API_KEY',
       apiKey,
@@ -212,14 +221,32 @@ async function finishWizard() {
   // Collect GLM
   if (document.getElementById('enable-glm')?.checked) {
     const apiKey = document.getElementById('glm-api-key').value;
+    if (!apiKey) return { error: 'GLM 已启用但未填写 API Key' };
     const model = document.getElementById('glm-model').value;
-    wizardData.models.push({
+    models.push({
       type: 'official',
       envKey: 'ZAI_API_KEY',
       apiKey,
       modelRef: `zai/${model}`,
     });
   }
+
+  return { models };
+}
+
+// ── Finish Wizard ──
+async function finishWizard() {
+  const collected = collectModelData();
+  if (collected.error) {
+    alert(collected.error);
+    return;
+  }
+  if (collected.models.length === 0) {
+    alert('请至少配置一个 AI 模型');
+    return;
+  }
+
+  const wizardData = { models: collected.models, channels: [] };
 
   // Collect Telegram
   if (document.getElementById('enable-telegram')?.checked) {
