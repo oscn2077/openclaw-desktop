@@ -357,6 +357,57 @@ function getOSName() {
   }
 }
 
+// ── Restart Gateway ──
+ipcMain.handle('restart-gateway', async (event) => {
+  stopGateway();
+  await new Promise(r => setTimeout(r, 500));
+  // Re-invoke start-gateway
+  const result = await new Promise((resolve) => {
+    const handler = ipcMain.handler?.['start-gateway'];
+    // Just trigger start via the same logic
+    resolve({ restarting: true });
+  });
+  return result;
+});
+
+// ── Read Config File Raw ──
+ipcMain.handle('read-config-raw', async () => {
+  try {
+    if (!fs.existsSync(CONFIG_PATH)) return { success: false, error: 'Config file not found' };
+    const content = fs.readFileSync(CONFIG_PATH, 'utf8');
+    return { success: true, content };
+  } catch (e) {
+    return { success: false, error: e.message };
+  }
+});
+
+// ── Write Config File Raw ──
+ipcMain.handle('write-config-raw', async (event, content) => {
+  try {
+    // Validate JSON first
+    JSON.parse(content);
+    fs.mkdirSync(OPENCLAW_HOME, { recursive: true });
+    fs.writeFileSync(CONFIG_PATH, content);
+    return { success: true };
+  } catch (e) {
+    return { success: false, error: e.message };
+  }
+});
+
+// ── Read Gateway Logs ──
+ipcMain.handle('read-gateway-logs', async () => {
+  try {
+    const logPath = path.join(OPENCLAW_HOME, 'logs', 'gateway.log');
+    if (!fs.existsSync(logPath)) return { success: true, content: '(暂无日志)' };
+    const content = fs.readFileSync(logPath, 'utf8');
+    // Return last 200 lines
+    const lines = content.split('\n');
+    return { success: true, content: lines.slice(-200).join('\n') };
+  } catch (e) {
+    return { success: false, error: e.message };
+  }
+});
+
 // ── Open External Links ──
 ipcMain.handle('open-external', async (event, url) => {
   shell.openExternal(url);

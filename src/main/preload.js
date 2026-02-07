@@ -11,11 +11,17 @@ contextBridge.exposeInMainWorld('api', {
   saveEnv: (envVars) => ipcRenderer.invoke('save-env', envVars),
   generateConfig: (wizardData) => ipcRenderer.invoke('generate-config', wizardData),
 
+  // Config raw (for JSON editor)
+  readConfigRaw: () => ipcRenderer.invoke('read-config-raw'),
+  writeConfigRaw: (content) => ipcRenderer.invoke('write-config-raw', content),
+
   // Gateway
   startGateway: () => ipcRenderer.invoke('start-gateway'),
   stopGateway: () => ipcRenderer.invoke('stop-gateway'),
+  restartGateway: () => ipcRenderer.invoke('restart-gateway'),
   getGatewayStatus: () => ipcRenderer.invoke('get-gateway-status'),
   getGatewayUrl: () => ipcRenderer.invoke('get-gateway-url'),
+  readGatewayLogs: () => ipcRenderer.invoke('read-gateway-logs'),
 
   // Events
   onGatewayStatus: (cb) => ipcRenderer.on('gateway-status', (e, status) => cb(status)),

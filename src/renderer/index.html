@@ -267,11 +267,17 @@
             <div class="status-actions">
               <button class="btn small primary" id="btn-start" onclick="startGateway()">启动</button>
               <button class="btn small danger" id="btn-stop" onclick="stopGateway()" style="display:none;">停止</button>
+              <button class="btn small" id="btn-restart" onclick="restartGateway()" style="display:none;">重启</button>
             </div>
           </div>
           <div class="status-card">
             <div class="status-title">主模型</div>
             <div class="status-value" id="status-model">未配置</div>
+            <div class="status-sub" id="status-model-provider"></div>
+          </div>
+          <div class="status-card">
+            <div class="status-title">Fallback 链</div>
+            <div class="status-value" id="status-fallbacks" style="font-size:14px;">无</div>
           </div>
           <div class="status-card">
             <div class="status-title">聊天渠道</div>
@@ -283,19 +289,129 @@
               <a href="#" id="webchat-link" onclick="openWebChat(); return false;">打开网页聊天 →</a>
             </div>
           </div>
+          <div class="status-card">
+            <div class="status-title">Providers</div>
+            <div class="status-value" id="status-providers">0</div>
+          </div>
         </div>
+
+        <!-- Provider Status List -->
+        <div id="status-provider-list" style="margin-top:24px;"></div>
       </div>
 
       <!-- Models Page -->
       <div id="page-models" class="page" style="display:none;">
-        <h1>🧠 模型管理</h1>
-        <p>管理你的 AI 模型接入（开发中...）</p>
+        <div class="page-header">
+          <h1>🧠 模型管理</h1>
+          <button class="btn primary" onclick="showAddProviderDialog()">+ 添加 Provider</button>
+        </div>
+
+        <!-- Current Model Info -->
+        <div class="section-card" id="models-current">
+          <h3>当前模型配置</h3>
+          <div class="info-row">
+            <span class="info-label">主模型</span>
+            <span class="info-value" id="models-primary">未配置</span>
+          </div>
+          <div class="info-row">
+            <span class="info-label">Fallback 链</span>
+            <span class="info-value" id="models-fallbacks">无</span>
+          </div>
+        </div>
+
+        <!-- Provider List -->
+        <div id="provider-list" class="provider-list"></div>
+
+        <!-- Add Provider Dialog (hidden by default) -->
+        <div id="add-provider-dialog" class="dialog-overlay" style="display:none;">
+          <div class="dialog">
+            <div class="dialog-header">
+              <h3>添加 Provider</h3>
+              <button class="btn-close" onclick="hideAddProviderDialog()">✕</button>
+            </div>
+            <div class="dialog-body">
+              <div class="form-group">
+                <label>Provider ID</label>
+                <input type="text" id="new-provider-id" placeholder="例如: my-openai">
+                <span class="help-text">唯一标识符，只能用英文、数字和连字符</span>
+              </div>
+              <div class="form-group">
+                <label>API 格式</label>
+                <select id="new-provider-api">
+                  <option value="anthropic-messages">Anthropic Messages (Claude 中转)</option>
+                  <option value="openai-responses">OpenAI Responses (GPT/Codex 中转)</option>
+                  <option value="openai-chat">OpenAI Chat Completions</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label>Base URL</label>
+                <input type="text" id="new-provider-url" placeholder="https://api.example.com/v1">
+              </div>
+              <div class="form-group">
+                <label>API Key</label>
+                <input type="password" id="new-provider-key" placeholder="你的 API Key / 卡密">
+              </div>
+              <div class="form-group">
+                <label>
+                  <input type="checkbox" id="new-provider-set-primary"> 设为主模型 Provider
+                </label>
+              </div>
+              <div class="form-group" id="new-provider-model-group">
+                <label>默认模型 ID</label>
+                <input type="text" id="new-provider-model-id" placeholder="例如: claude-opus-4-6">
+                <span class="help-text">设为主模型时需要填写</span>
+              </div>
+            </div>
+            <div class="dialog-footer">
+              <button class="btn" onclick="hideAddProviderDialog()">取消</button>
+              <button class="btn primary" onclick="addProvider()">添加</button>
+            </div>
+          </div>
+        </div>
       </div>
 
       <!-- Channels Page -->
       <div id="page-channels" class="page" style="display:none;">
-        <h1>💬 渠道管理</h1>
-        <p>管理聊天渠道接入（开发中...）</p>
+        <div class="page-header">
+          <h1>💬 渠道管理</h1>
+          <button class="btn primary" onclick="showAddChannelDialog()">+ 添加渠道</button>
+        </div>
+
+        <!-- Channel List -->
+        <div id="channel-list" class="channel-list-manage"></div>
+
+        <!-- Add Channel Dialog -->
+        <div id="add-channel-dialog" class="dialog-overlay" style="display:none;">
+          <div class="dialog">
+            <div class="dialog-header">
+              <h3>添加渠道</h3>
+              <button class="btn-close" onclick="hideAddChannelDialog()">✕</button>
+            </div>
+            <div class="dialog-body">
+              <div class="form-group">
+                <label>渠道类型</label>
+                <select id="new-channel-type" onchange="onChannelTypeChange()">
+                  <option value="telegram">Telegram</option>
+                  <option value="discord">Discord</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label>Bot Token</label>
+                <input type="password" id="new-channel-token" placeholder="你的 Bot Token">
+                <span class="help-text" id="new-channel-help">从 @BotFather 获取</span>
+              </div>
+              <div class="form-group" id="channel-allowed-users-group">
+                <label>允许的用户 (可选)</label>
+                <input type="text" id="new-channel-allowed-users" placeholder="用户ID，多个用逗号分隔">
+                <span class="help-text">留空则所有人可用</span>
+              </div>
+            </div>
+            <div class="dialog-footer">
+              <button class="btn" onclick="hideAddChannelDialog()">取消</button>
+              <button class="btn primary" onclick="addChannel()">添加</button>
+            </div>
+          </div>
+        </div>
       </div>
 
       <!-- Chat Page -->
@@ -315,7 +431,32 @@
       <!-- Settings Page -->
       <div id="page-settings" class="page" style="display:none;">
         <h1>⚙️ 设置</h1>
-        <p>高级设置（开发中...）</p>
+
+        <div class="settings-section">
+          <h3>高级模式：配置文件编辑器</h3>
+          <p class="hint">直接编辑 openclaw.json，修改后需重启 Gateway 生效</p>
+          <div class="json-editor-container">
+            <textarea id="json-editor" class="json-editor" spellcheck="false"></textarea>
+            <div id="json-editor-error" class="json-error" style="display:none;"></div>
+          </div>
+          <div class="settings-actions">
+            <button class="btn" onclick="loadJsonEditor()">重新加载</button>
+            <button class="btn primary" onclick="saveJsonEditor()">保存配置</button>
+            <button class="btn" onclick="formatJsonEditor()">格式化</button>
+          </div>
+        </div>
+
+        <div class="settings-section" style="margin-top:24px;">
+          <h3>关于</h3>
+          <div class="info-row">
+            <span class="info-label">配置文件</span>
+            <span class="info-value">~/.openclaw/openclaw.json</span>
+          </div>
+          <div class="info-row">
+            <span class="info-label">工作目录</span>
+            <span class="info-value">~/.openclaw/workspace</span>
+          </div>
+        </div>
       </div>
     </main>
   </div>
