@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# OpenClaw 一键安装脚本 — ApexYY 专版
+# OpenClaw 一键安装脚本 — ApexYY 专版 (加固版)
 # 用法: bash install-apexyy.sh
 #
 # 预置ApexYY中转全部节点和模型，用户只需要填 API Key
@@ -14,6 +14,7 @@ if (( BASH_VERSINFO[0] < 4 )); then
   exit 1
 fi
 
+# ========== 颜色定义 ==========
 RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'
 BLUE='\033[0;34m'; CYAN='\033[0;36m'; BOLD='\033[1m'; NC='\033[0m'
 
@@ -43,6 +44,60 @@ detect_os() {
     grep -qi microsoft /proc/version 2>/dev/null && OS="wsl"
   else die "不支持的操作系统: $OSTYPE"; fi
   info "系统: ${OS}"
+}
+
+# ========== 网络连通性检查 ==========
+check_network() {
+  step "网络连通性检查"
+  local test_urls=("https://yunyi.rdzhvip.com" "https://yunyi.cfd")
+  local reachable=0
+
+  for url in "${test_urls[@]}"; do
+    if curl -sS --connect-timeout 5 --max-time 10 -o /dev/null -w '' "$url" 2>/dev/null; then
+      info "${url} 可达 ✓"
+      reachable=1
+    else
+      warn "${url} 不可达"
+    fi
+  done
+
+  if (( reachable == 0 )); then
+    err "所有 API 节点均不可达！请检查网络连接。"
+    ask "是否继续安装? (y/N)"; read -r ans
+    [[ "${ans,,}" != "y" ]] && die "安装中止"
+    warn "继续安装，但 API 调用可能失败"
+  fi
+}
+
+# ========== API Key 格式校验 ==========
+validate_api_key() {
+  local key="$1"
+  local name="$2"
+
+  if [[ -z "$key" ]]; then
+    die "${name} 卡密不能为空"
+  fi
+
+  if (( ${#key} < 8 )); then
+    err "${name} 卡密长度过短 (${#key} 字符)，看起来不像有效的卡密"
+    ask "确定要继续吗? (y/N)"; read -r ans
+    [[ "${ans,,}" != "y" ]] && die "请检查卡密后重试"
+  fi
+
+  if (( ${#key} > 256 )); then
+    warn "${name} 卡密长度异常 (${#key} 字符)，请确认是否正确"
+  fi
+
+  # 检查是否包含空格或明显的占位符
+  if [[ "$key" == *" "* ]]; then
+    warn "${name} 卡密包含空格，可能是粘贴错误"
+    ask "确定要继续吗? (y/N)"; read -r ans
+    [[ "${ans,,}" != "y" ]] && die "请检查卡密后重试"
+  fi
+
+  if [[ "$key" == "your-key-here" || "$key" == "xxx" || "$key" == "test" ]]; then
+    die "${name} 卡密看起来是占位符，请输入真实的卡密"
+  fi
 }
 
 # ========== Node.js ==========
@@ -76,25 +131,19 @@ ensure_node() {
       brew install node@22 && brew link --overwrite node@22 2>/dev/null ;;
     linux|wsl)
       if command -v apt-get &>/dev/null; then
-        # Ubuntu / Debian / WSL
         curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash -
         sudo apt-get install -y nodejs
       elif command -v dnf &>/dev/null; then
-        # Fedora / RHEL 8+ / CentOS Stream / Amazon Linux 2023
         curl -fsSL https://rpm.nodesource.com/setup_22.x | sudo bash -
         sudo dnf install -y nodejs
       elif command -v yum &>/dev/null; then
-        # CentOS 7 / RHEL 7 / Amazon Linux 2
         curl -fsSL https://rpm.nodesource.com/setup_22.x | sudo bash -
         sudo yum install -y nodejs
       elif command -v pacman &>/dev/null; then
-        # Arch / Manjaro
         sudo pacman -Sy --noconfirm nodejs npm
       elif command -v apk &>/dev/null; then
-        # Alpine
         sudo apk add --no-cache nodejs npm
       elif command -v zypper &>/dev/null; then
-        # openSUSE
         curl -fsSL https://rpm.nodesource.com/setup_22.x | sudo bash -
         sudo zypper install -y nodejs
       else
@@ -106,7 +155,6 @@ ensure_node() {
         local new_ver; new_ver=$(node -v | sed 's/v//' | cut -d. -f1)
         if (( new_ver < 22 )); then
           warn "PATH 中仍是旧版 Node，尝试用 nvm 安装..."
-          # 安装 nvm 并装 22
           curl -fsSL https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.1/install.sh | bash
           export NVM_DIR="$HOME/.nvm"
           [ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"
@@ -184,14 +232,14 @@ choose_product() {
       HAS_CLAUDE=true
       ask "请输入 Claude 卡密:"
       read -r CLAUDE_KEY
-      [[ -z "$CLAUDE_KEY" ]] && die "卡密不能为空"
+      validate_api_key "$CLAUDE_KEY" "Claude"
       info "Claude 卡密已记录"
       ;;
     2)
       HAS_CODEX=true
       ask "请输入 Codex 卡密:"
       read -r CODEX_KEY
-      [[ -z "$CODEX_KEY" ]] && die "卡密不能为空"
+      validate_api_key "$CODEX_KEY" "Codex"
       info "Codex 卡密已记录"
       ;;
     3)
@@ -199,11 +247,11 @@ choose_product() {
       HAS_CODEX=true
       ask "请输入 Claude 卡密:"
       read -r CLAUDE_KEY
-      [[ -z "$CLAUDE_KEY" ]] && die "Claude 卡密不能为空"
+      validate_api_key "$CLAUDE_KEY" "Claude"
       info "Claude 卡密已记录"
       ask "请输入 Codex 卡密:"
       read -r CODEX_KEY
-      [[ -z "$CODEX_KEY" ]] && die "Codex 卡密不能为空"
+      validate_api_key "$CODEX_KEY" "Codex"
       info "Codex 卡密已记录"
       ;;
     *) die "无效选择" ;;
@@ -289,6 +337,8 @@ choose_channels() {
 apply_config() {
   step "应用配置"
 
+  local CONFIG_PATH="$HOME/.openclaw/openclaw.json"
+
   # 1. 用 openclaw onboard 建基础配置
   info "初始化 OpenClaw..."
   openclaw onboard --non-interactive \
@@ -304,10 +354,33 @@ apply_config() {
     --skip-ui \
     --install-daemon 2>&1 | tail -5 || warn "onboard 有警告，继续..."
 
+  # 1.5 检查 onboard 是否生成了 openclaw.json，如果没有就手动创建
+  if [[ ! -f "$CONFIG_PATH" ]]; then
+    warn "openclaw onboard 未生成配置文件，手动创建..."
+    mkdir -p "$HOME/.openclaw"
+    cat > "$CONFIG_PATH" << 'JSONEOF'
+{
+  "gateway": {
+    "port": 18789,
+    "bind": "loopback",
+    "auth": "token"
+  },
+  "models": {
+    "mode": "merge",
+    "providers": {}
+  },
+  "agents": {
+    "defaults": {}
+  },
+  "channels": {}
+}
+JSONEOF
+    info "已手动创建 openclaw.json"
+  fi
+
   # 2. 写入ApexYY provider 配置
   info "写入ApexYY模型配置..."
 
-  # 通过环境变量传递 key（避免 heredoc 中特殊字符破坏 python 语法）
   local py_has_claude="False"; [[ "$HAS_CLAUDE" == "true" ]] && py_has_claude="True"
   local py_has_codex="False"; [[ "$HAS_CODEX" == "true" ]] && py_has_codex="True"
 
@@ -334,11 +407,9 @@ base_url = "${AY_BASE_URL}"
 has_claude = ${py_has_claude}
 has_codex = ${py_has_codex}
 
-# 从环境变量读取 key（安全，不受特殊字符影响）
 claude_key = os.environ.get('AY_CLAUDE_KEY', '')
 codex_key = os.environ.get('AY_CODEX_KEY', '')
 
-# Claude provider — models 为空数组，自动检测
 if has_claude:
     config['models']['providers']['apexyy-claude'] = {
         'baseUrl': base_url + '/claude',
@@ -350,7 +421,6 @@ if has_claude:
         'models': []
     }
 
-# Codex provider — 需要显式声明模型
 if has_codex:
     config['models']['providers']['apexyy-codex'] = {
         'baseUrl': base_url + '/codex',
@@ -381,7 +451,6 @@ if has_codex:
         ]
     }
 
-# 设置主模型和 fallback
 config['agents']['defaults']['model'] = {
     'primary': "${PRIMARY_REF}",
     'fallbacks': ${fb_py}
@@ -431,16 +500,20 @@ start_gateway() {
   step "启动 Gateway"
   openclaw gateway restart 2>&1 || openclaw gateway start 2>&1 || warn "启动失败"
   sleep 2
+
+  # 验证启动状态
   if openclaw gateway status 2>&1 | grep -qi "running\|online\|listening"; then
     info "Gateway 运行中 ✓"
   else
-    warn "请检查: openclaw gateway status"
+    warn "Gateway 可能未正常启动"
+    warn "请手动检查: openclaw gateway status"
+    warn "尝试手动启动: openclaw gateway start"
   fi
 }
 
 # ========== 验证 ==========
 verify() {
-  step "验证"
+  step "验证配置"
   python3 -c "
 import json
 with open('$HOME/.openclaw/openclaw.json') as f:
@@ -457,24 +530,52 @@ for name, data in providers.items():
 " 2>/dev/null || true
 }
 
-# ========== 完成 ==========
-finish() {
-  step "安装完成! 🎉"
+# ========== 安装摘要 ==========
+print_summary() {
   echo ""
-  echo -e "  ${BOLD}ApexYY节点:${NC} ${AY_NODE_NAME} (${AY_BASE_URL})"
+  echo -e "${GREEN}${BOLD}╔══════════════════════════════════════════════════╗${NC}"
+  echo -e "${GREEN}${BOLD}║          🎉 OpenClaw 安装完成!                  ║${NC}"
+  echo -e "${GREEN}${BOLD}╚══════════════════════════════════════════════════╝${NC}"
   echo ""
-  echo -e "  ${BOLD}常用命令:${NC}"
+  echo -e "  ${BOLD}📦 已安装:${NC}"
+  echo -e "    • Node.js $(node -v 2>/dev/null || echo '?')"
+  echo -e "    • OpenClaw $(openclaw --version 2>/dev/null || echo '?')"
+  echo ""
+  echo -e "  ${BOLD}⚙️  已配置:${NC}"
+  echo -e "    • ApexYY节点: ${AY_NODE_NAME} (${AY_BASE_URL})"
+  echo -e "    • 主模型: ${PRIMARY_REF}"
+  [[ "$HAS_CLAUDE" == "true" ]] && echo -e "    • Claude Provider: ${GREEN}已配置${NC}"
+  [[ "$HAS_CODEX" == "true" ]] && echo -e "    • Codex Provider: ${GREEN}已配置${NC}"
+  if [[ ${#CHANNEL_CMDS[@]} -gt 0 ]]; then
+    echo -e "    • 消息渠道: ${#CHANNEL_CMDS[@]} 个"
+  fi
+  echo ""
+  echo -e "  ${BOLD}🌐 WebChat:${NC}"
+  echo -e "    ${CYAN}http://localhost:18789${NC}"
+  echo -e "    在浏览器中打开即可开始对话"
+  echo ""
+  echo -e "  ${BOLD}📋 常用命令:${NC}"
   echo "    openclaw gateway status    — 查看状态"
   echo "    openclaw gateway restart   — 重启"
+  echo "    openclaw gateway stop      — 停止"
   echo "    openclaw doctor            — 健康检查"
   echo ""
-  echo -e "  ${BOLD}WebChat:${NC} http://localhost:18789"
+  echo -e "  ${BOLD}💰 额度查询:${NC}"
+  echo -e "    ${CYAN}https://yunyi.rdzhvip.com/user${NC}"
   echo ""
-  echo -e "  ${BOLD}额度查询:${NC} https://yunyi.rdzhvip.com/user"
-  echo ""
-  echo -e "  ${BOLD}切换节点:${NC}"
+  echo -e "  ${BOLD}🔄 切换节点:${NC}"
   echo "    编辑 ~/.openclaw/openclaw.json 中的 baseUrl"
   echo "    然后 openclaw gateway restart"
+  echo ""
+  echo -e "  ${BOLD}🗑️  卸载方法:${NC}"
+  echo "    1. openclaw gateway stop"
+  echo "    2. npm uninstall -g openclaw"
+  echo "    3. rm -rf ~/.openclaw"
+  echo "    或使用卸载脚本: bash uninstall-apexyy.sh"
+  echo ""
+  echo -e "  ${BOLD}🔄 更新方法:${NC}"
+  echo "    bash update-apexyy.sh"
+  echo "    或手动: npm update -g openclaw && openclaw gateway restart"
   echo ""
 }
 
@@ -486,6 +587,7 @@ main() {
   echo ""
 
   detect_os
+  check_network
   ensure_node
   ensure_openclaw
   choose_node
@@ -495,7 +597,7 @@ main() {
   apply_config
   start_gateway
   verify
-  finish
+  print_summary
 }
 
 main "$@"

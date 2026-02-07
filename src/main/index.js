@@ -285,6 +285,7 @@ ipcMain.handle('start-gateway', async () => {
       if (!started && (text.includes('listening') || text.includes('ready') || text.includes('Gateway'))) {
         started = true;
         gatewayStatus = 'running';
+        gatewayStartTime = Date.now();
         mainWindow.webContents.send('gateway-status', gatewayStatus);
         resolve({ success: true });
       }
@@ -424,3 +425,154 @@ ipcMain.handle('get-gateway-url', async () => {
     return { port: 18789, token: '', url: 'http://127.0.0.1:18789' };
   }
 });
+
+// ── Test API Connection ──
+ipcMain.handle('test-connection', async (event, { baseUrl, apiKey, apiFormat }) => {
+  const https = require('https');
+  const http = require('http');
+
+  return new Promise((resolve) => {
+    try {
+      let testUrl, options, postData;
+
+      if (apiFormat === 'anthropic-messages') {
+        // Anthropic-style: POST /v1/messages with minimal payload
+        testUrl = new URL(baseUrl.replace(/\/$/, '') + '/v1/messages');
+        postData = JSON.stringify({
+          model: 'claude-sonnet-4-5',
+          max_tokens: 1,
+          messages: [{ role: 'user', content: 'hi' }],
+        });
+        options = {
+          hostname: testUrl.hostname,
+          port: testUrl.port || (testUrl.protocol === 'https:' ? 443 : 80),
+          path: testUrl.pathname,
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-api-key': apiKey,
+            'anthropic-version': '2023-06-01',
+            'Content-Length': Buffer.byteLength(postData),
+          },
+          timeout: 15000,
+        };
+      } else if (apiFormat === 'openai-responses' || apiFormat === 'openai-chat') {
+        // OpenAI-style: POST /v1/chat/completions
+        testUrl = new URL(baseUrl.replace(/\/$/, '') + '/v1/chat/completions');
+        postData = JSON.stringify({
+          model: 'gpt-4.1',
+          max_tokens: 1,
+          messages: [{ role: 'user', content: 'hi' }],
+        });
+        options = {
+          hostname: testUrl.hostname,
+          port: testUrl.port || (testUrl.protocol === 'https:' ? 443 : 80),
+          path: testUrl.pathname,
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${apiKey}`,
+            'Content-Length': Buffer.byteLength(postData),
+          },
+          timeout: 15000,
+        };
+      } else if (apiFormat === 'gemini') {
+        // Gemini: just check the API key with a models list
+        testUrl = new URL(`https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`);
+        options = {
+          hostname: testUrl.hostname,
+          port: 443,
+          path: testUrl.pathname + testUrl.search,
+          method: 'GET',
+          headers: {},
+          timeout: 15000,
+        };
+        postData = null;
+      } else if (apiFormat === 'zhipu') {
+        // Zhipu/GLM: POST chat completions
+        testUrl = new URL('https://open.bigmodel.cn/api/paas/v4/chat/completions');
+        postData = JSON.stringify({
+          model: 'glm-4-flash',
+          max_tokens: 1,
+          messages: [{ role: 'user', content: 'hi' }],
+        });
+        options = {
+          hostname: testUrl.hostname,
+          port: 443,
+          path: testUrl.pathname,
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${apiKey}`,
+            'Content-Length': Buffer.byteLength(postData),
+          },
+          timeout: 15000,
+        };
+      } else {
+        resolve({ success: false, error: 'Unknown API format' });
+        return;
+      }
+
+      const proto = (testUrl.protocol === 'https:') ? https : http;
+      const req = proto.request(options, (res) => {
+        let body = '';
+        res.on('data', (chunk) => { body += chunk; });
+        res.on('end', () => {
+          // 200 = success, 401/403 = bad key, anything else = at least reachable
+          if (res.statusCode === 200 || res.statusCode === 201) {
+            resolve({ success: true });
+          } else if (res.statusCode === 401 || res.statusCode === 403) {
+            resolve({ success: false, error: `认证失败 (HTTP ${res.statusCode})，请检查 API Key` });
+          } else if (res.statusCode === 400) {
+            // 400 often means the API is reachable but request was bad — key is valid
+            resolve({ success: true, note: 'API 可达，Key 格式正确' });
+          } else {
+            resolve({ success: false, error: `HTTP ${res.statusCode}: ${body.slice(0, 200)}` });
+          }
+        });
+      });
+
+      req.on('error', (err) => {
+        resolve({ success: false, error: `连接失败: ${err.message}` });
+      });
+
+      req.on('timeout', () => {
+        req.destroy();
+        resolve({ success: false, error: '连接超时 (15s)' });
+      });
+
+      if (postData) req.write(postData);
+      req.end();
+    } catch (e) {
+      resolve({ success: false, error: e.message });
+    }
+  });
+});
+
+// ── System Info ──
+ipcMain.handle('get-system-info', async () => {
+  const info = {
+    nodeVersion: process.version,
+    electronVersion: process.versions.electron,
+    os: `${getOSName()} (${process.arch})`,
+    platform: process.platform,
+    openclawVersion: null,
+    gatewayUptime: null,
+  };
+
+  try {
+    info.openclawVersion = execSync('openclaw --version', { encoding: 'utf8' }).trim();
+  } catch (e) {
+    info.openclawVersion = '未安装';
+  }
+
+  // Gateway uptime
+  if (gatewayProcess && gatewayStatus === 'running') {
+    info.gatewayUptime = Date.now() - (gatewayStartTime || Date.now());
+  }
+
+  return info;
+});
+
+// Track gateway start time
+let gatewayStartTime = null;

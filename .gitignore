@@ -1,6 +1,36 @@
+# Dependencies
 node_modules/
+
+# Build output
 dist/
+build/
+out/
+
+# Logs
+*.log
+npm-debug.log*
+
+# Environment
 .env
+.env.local
+.env.*.local
+
+# OS files
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Executables / Installers
 *.exe
 *.dmg
 *.AppImage
+*.deb
+*.rpm
+*.snap
