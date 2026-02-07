@@ -554,6 +554,13 @@ print_summary() {
   echo -e "    ${CYAN}http://localhost:18789${NC}"
   echo -e "    在浏览器中打开即可开始对话"
   echo ""
+  # Web Panel info (if installed)
+  if [[ -f "$HOME/.openclaw/web-panel/server.js" ]]; then
+    echo -e "  ${BOLD}🖥️  Web 管理面板:${NC}"
+    echo -e "    ${CYAN}http://localhost:5338${NC}"
+    echo -e "    管理 Gateway、模型、渠道、配置"
+    echo ""
+  fi
   echo -e "  ${BOLD}📋 常用命令:${NC}"
   echo "    openclaw gateway status    — 查看状态"
   echo "    openclaw gateway restart   — 重启"
@@ -579,6 +586,86 @@ print_summary() {
   echo ""
 }
 
+# ========== Web 管理面板 ==========
+install_web_panel() {
+  # 只在 Linux 服务器（无 GUI）上安装
+  if [[ "$OS" != "linux" ]] && [[ "$OS" != "wsl" ]]; then
+    return 0
+  fi
+
+  # 如果有 DISPLAY 或者是 WSL，跳过（有 GUI 可以用 Electron 版）
+  if [[ -n "${DISPLAY:-}" ]] || [[ -f /proc/sys/fs/binfmt_misc/WSLInterop ]]; then
+    return 0
+  fi
+
+  step "安装 Web 管理面板"
+  info "检测到 Linux 服务器（无 GUI），安装 Web 管理面板..."
+
+  local PANEL_DIR="$HOME/.openclaw/web-panel"
+  local SCRIPT_DIR
+  SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+  local SOURCE_DIR="${SCRIPT_DIR}/web-panel"
+
+  # 检查源文件是否存在
+  if [[ ! -d "$SOURCE_DIR" ]]; then
+    warn "Web 面板源文件不存在 (${SOURCE_DIR})，跳过"
+    return 0
+  fi
+
+  # 复制文件
+  mkdir -p "$PANEL_DIR"
+  cp -r "$SOURCE_DIR"/* "$PANEL_DIR/"
+
+  # 安装依赖
+  cd "$PANEL_DIR" && npm install --production 2>&1 | tail -3 || warn "npm install 有警告"
+
+  # 创建 systemd 服务
+  local SERVICE_FILE="$HOME/.config/systemd/user/openclaw-web-panel.service"
+  mkdir -p "$(dirname "$SERVICE_FILE")"
+  cat > "$SERVICE_FILE" << EOF
+[Unit]
+Description=OpenClaw Web Panel
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=${PANEL_DIR}
+ExecStart=$(which node) ${PANEL_DIR}/server.js
+Restart=on-failure
+RestartSec=5
+Environment=NODE_ENV=production
+
+[Install]
+WantedBy=default.target
+EOF
+
+  # 启动服务
+  systemctl --user daemon-reload 2>/dev/null || true
+  systemctl --user enable openclaw-web-panel 2>/dev/null || true
+  systemctl --user start openclaw-web-panel 2>/dev/null || true
+
+  # 检查是否启动成功
+  sleep 2
+  if systemctl --user is-active openclaw-web-panel &>/dev/null; then
+    info "Web 管理面板已启动 ✓"
+    info "地址: http://localhost:5338"
+  else
+    # 如果 systemd 不可用，直接后台启动
+    warn "systemd 用户服务不可用，使用 nohup 启动..."
+    cd "$PANEL_DIR"
+    nohup node server.js > "$HOME/.openclaw/web-panel.log" 2>&1 &
+    local panel_pid=$!
+    sleep 2
+    if kill -0 "$panel_pid" 2>/dev/null; then
+      info "Web 管理面板已启动 (PID: ${panel_pid}) ✓"
+      info "地址: http://localhost:5338"
+      echo "$panel_pid" > "$PANEL_DIR/.pid"
+    else
+      warn "Web 管理面板启动失败，请手动启动: cd ${PANEL_DIR} && node server.js"
+    fi
+  fi
+}
+
 # ========== 主流程 ==========
 main() {
   echo ""
@@ -596,6 +683,7 @@ main() {
   choose_channels
   apply_config
   start_gateway
+  install_web_panel
   verify
   print_summary
 }
