@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# OpenClaw 一键安装+配置脚本 (交互式)
+# OpenClaw 一键安装+配置脚本 v2 (交互式)
+# 核心原则：尽量用 openclaw CLI 原生命令，不手拼 JSON
 # 支持: Ubuntu 22.04+ / Debian 12+ / macOS
-# 用法: bash install.sh
 set -euo pipefail
 
 # ========== 颜色 ==========
@@ -13,8 +13,7 @@ warn()  { echo -e "${YELLOW}[!]${NC} $*"; }
 err()   { echo -e "${RED}[✗]${NC} $*"; }
 step()  { echo -e "\n${BLUE}${BOLD}>>> $*${NC}"; }
 ask()   { echo -en "${CYAN}[?]${NC} $* "; }
-
-die() { err "$*"; exit 1; }
+die()   { err "$*"; exit 1; }
 
 # ========== OS 检测 ==========
 detect_os() {
@@ -35,13 +34,13 @@ detect_os() {
   info "检测到系统: ${OS} (${DISTRO})"
 }
 
-# ========== Node.js 检测与安装 ==========
+# ========== Node.js ==========
 ensure_node() {
   step "检查 Node.js"
   if command -v node &>/dev/null; then
     local ver; ver=$(node -v | sed 's/v//' | cut -d. -f1)
     if (( ver >= 22 )); then
-      info "Node.js $(node -v) 已安装，满足要求 (>=22)"
+      info "Node.js $(node -v) ✓"
       return 0
     else
       warn "Node.js $(node -v) 版本过低，需要 22+"
@@ -51,425 +50,491 @@ ensure_node() {
   fi
   ask "是否自动安装 Node.js 22? (Y/n)"
   read -r ans
-  if [[ "${ans,,}" == "n" ]]; then
-    die "请手动安装 Node.js 22+ 后重试: https://nodejs.org"
-  fi
+  [[ "${ans,,}" == "n" ]] && die "请手动安装 Node.js 22+: https://nodejs.org"
   case "$OS" in
-    macos) install_node_macos ;;
-    linux|wsl) install_node_linux ;;
+    macos)
+      if ! command -v brew &>/dev/null; then
+        /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)" || die "Homebrew 安装失败"
+      fi
+      brew install node@22 && brew link --overwrite node@22 2>/dev/null || die "Node.js 安装失败"
+      ;;
+    linux|wsl)
+      if command -v apt-get &>/dev/null; then
+        curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash - || die "添加 NodeSource 源失败"
+        sudo apt-get install -y nodejs || die "安装 Node.js 失败"
+      elif command -v dnf &>/dev/null; then
+        curl -fsSL https://rpm.nodesource.com/setup_22.x | sudo bash - || die "添加 NodeSource 源失败"
+        sudo dnf install -y nodejs || die "安装 Node.js 失败"
+      else
+        die "不支持的包管理器，请手动安装: https://nodejs.org"
+      fi
+      ;;
   esac
-}
-
-install_node_linux() {
-  info "正在安装 Node.js 22 (Linux)..."
-  if command -v apt-get &>/dev/null; then
-    curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash - || die "添加 NodeSource 源失败"
-    sudo apt-get install -y nodejs || die "安装 Node.js 失败"
-  elif command -v dnf &>/dev/null; then
-    curl -fsSL https://rpm.nodesource.com/setup_22.x | sudo bash - || die "添加 NodeSource 源失败"
-    sudo dnf install -y nodejs || die "安装 Node.js 失败"
-  else
-    die "不支持的包管理器，请手动安装 Node.js 22+: https://nodejs.org"
-  fi
   info "Node.js $(node -v) 安装完成"
 }
 
-install_node_macos() {
-  info "正在安装 Node.js 22 (macOS)..."
-  if ! command -v brew &>/dev/null; then
-    info "先安装 Homebrew..."
-    /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)" || die "Homebrew 安装失败"
-  fi
-  brew install node@22 || die "Node.js 安装失败"
-  brew link --overwrite node@22 2>/dev/null || true
-  info "Node.js $(node -v) 安装完成"
-}
-
-# ========== OpenClaw 安装 ==========
+# ========== OpenClaw ==========
 ensure_openclaw() {
   step "检查 OpenClaw"
   if command -v openclaw &>/dev/null; then
     local ver; ver=$(openclaw --version 2>/dev/null || echo "unknown")
     info "OpenClaw 已安装: $ver"
-    ask "是否重新安装/更新? (y/N)"
+    ask "是否更新到最新版? (y/N)"
     read -r ans
     [[ "${ans,,}" != "y" ]] && return 0
   fi
   info "正在安装 OpenClaw..."
-  SHARP_IGNORE_GLOBAL_LIBVIPS=1 npm install -g openclaw@latest 2>&1 | tail -5 || die "OpenClaw 安装失败，请检查网络和 npm 配置"
+  SHARP_IGNORE_GLOBAL_LIBVIPS=1 npm install -g openclaw@latest 2>&1 | tail -5 || die "安装失败"
   info "OpenClaw $(openclaw --version 2>/dev/null) 安装完成"
 }
 
 # ========== 模型选择 ==========
+# 官方 API 用 openclaw onboard --non-interactive
+# 中转 API 用 openclaw config + 手动写 providers
 choose_model() {
   step "选择 AI 模型"
   echo ""
-  echo "  ${BOLD}官方 API:${NC}"
-  echo "    1) Claude (Anthropic) — 推荐，最强编程能力"
+  echo "  ${BOLD}官方 API（用 OpenClaw 原生支持）:${NC}"
+  echo "    1) Claude (Anthropic) — 最强编程+推理"
   echo "    2) OpenAI (GPT) — 通用能力强"
   echo "    3) Google Gemini — 免费额度大"
-  echo "    4) GLM (智谱 Z.AI) — 国产模型"
+  echo "    4) GLM (智谱) — 国产免费模型"
+  echo "    5) Moonshot (Kimi) — 国产长上下文"
+  echo "    6) MiniMax — 国产多模态"
+  echo "    7) 小米 — 国产"
   echo ""
-  echo "  ${BOLD}中转 API (兼容第三方):${NC}"
-  echo "    5) Claude 中转 (Anthropic 兼容)"
-  echo "    6) OpenAI 中转 (OpenAI 兼容)"
+  echo "  ${BOLD}中转 API（第三方代理）:${NC}"
+  echo "    8) Claude 中转 (Anthropic 兼容接口)"
+  echo "    9) OpenAI 中转 (OpenAI 兼容接口)"
   echo ""
-  ask "请选择 [1-6]:"
+  ask "请选择 [1-9]:"
   read -r choice
 
+  USE_ONBOARD=true  # 是否用 openclaw onboard 来配置
+  ONBOARD_ARGS=""
+  CUSTOM_PROVIDER_JSON=""
+
   case "$choice" in
-    1) setup_anthropic ;;
-    2) setup_openai ;;
-    3) setup_gemini ;;
-    4) setup_zai ;;
-    5) setup_claude_proxy ;;
-    6) setup_openai_proxy ;;
-    *) warn "无效选择，默认使用 Claude"; setup_anthropic ;;
+    1)
+      ask "请输入 Anthropic API Key (sk-ant-...):"
+      read -r API_KEY
+      [[ -z "$API_KEY" ]] && die "API Key 不能为空"
+      ONBOARD_ARGS="--auth-choice apiKey --anthropic-api-key ${API_KEY}"
+      ;;
+    2)
+      ask "请输入 OpenAI API Key (sk-...):"
+      read -r API_KEY
+      [[ -z "$API_KEY" ]] && die "API Key 不能为空"
+      ONBOARD_ARGS="--auth-choice openai-api-key --openai-api-key ${API_KEY}"
+      ;;
+    3)
+      ask "请输入 Gemini API Key (从 https://aistudio.google.com/apikey 获取):"
+      read -r API_KEY
+      [[ -z "$API_KEY" ]] && die "API Key 不能为空"
+      ONBOARD_ARGS="--auth-choice gemini-api-key --gemini-api-key ${API_KEY}"
+      ;;
+    4)
+      ask "请输入 Z.AI API Key (从 https://open.bigmodel.cn 获取):"
+      read -r API_KEY
+      [[ -z "$API_KEY" ]] && die "API Key 不能为空"
+      ONBOARD_ARGS="--auth-choice zai-api-key --zai-api-key ${API_KEY}"
+      ;;
+    5)
+      ask "请输入 Moonshot API Key:"
+      read -r API_KEY
+      [[ -z "$API_KEY" ]] && die "API Key 不能为空"
+      ONBOARD_ARGS="--auth-choice moonshot-api-key --moonshot-api-key ${API_KEY}"
+      ;;
+    6)
+      ask "请输入 MiniMax API Key:"
+      read -r API_KEY
+      [[ -z "$API_KEY" ]] && die "API Key 不能为空"
+      ONBOARD_ARGS="--auth-choice minimax-api --minimax-api-key ${API_KEY}"
+      ;;
+    7)
+      ask "请输入小米 API Key:"
+      read -r API_KEY
+      [[ -z "$API_KEY" ]] && die "API Key 不能为空"
+      ONBOARD_ARGS="--auth-choice xiaomi-api-key --xiaomi-api-key ${API_KEY}"
+      ;;
+    8) setup_claude_proxy ;;
+    9) setup_openai_proxy ;;
+    *) warn "无效选择，默认 Claude"; ask "请输入 API Key:"; read -r API_KEY; ONBOARD_ARGS="--auth-choice apiKey --anthropic-api-key ${API_KEY}" ;;
   esac
 }
 
-setup_anthropic() {
-  MODEL_PROVIDER="anthropic"
-  MODEL_PRIMARY="anthropic/claude-sonnet-4-5"
-  AUTH_CHOICE="apiKey"
-  ask "请输入 Anthropic API Key (sk-ant-...):"
-  read -r API_KEY
-  [[ -z "$API_KEY" ]] && die "API Key 不能为空"
-  ENV_VARS="ANTHROPIC_API_KEY=${API_KEY}"
-  ONBOARD_AUTH_ARGS="--auth-choice apiKey --anthropic-api-key ${API_KEY}"
-  MODEL_CONFIG=""
-}
-
-setup_openai() {
-  MODEL_PROVIDER="openai"
-  MODEL_PRIMARY="openai/gpt-4o"
-  AUTH_CHOICE="openai-api-key"
-  ask "请输入 OpenAI API Key (sk-...):"
-  read -r API_KEY
-  [[ -z "$API_KEY" ]] && die "API Key 不能为空"
-  ENV_VARS="OPENAI_API_KEY=${API_KEY}"
-  ONBOARD_AUTH_ARGS="--auth-choice openai-api-key --openai-api-key ${API_KEY}"
-  MODEL_CONFIG=""
-}
-
-setup_gemini() {
-  MODEL_PROVIDER="google"
-  MODEL_PRIMARY="google/gemini-2.5-pro"
-  AUTH_CHOICE="gemini-api-key"
-  ask "请输入 Gemini API Key:"
-  read -r API_KEY
-  [[ -z "$API_KEY" ]] && die "API Key 不能为空"
-  ENV_VARS="GEMINI_API_KEY=${API_KEY}"
-  ONBOARD_AUTH_ARGS="--auth-choice gemini-api-key --gemini-api-key ${API_KEY}"
-  MODEL_CONFIG=""
-}
-
-setup_zai() {
-  MODEL_PROVIDER="zai"
-  MODEL_PRIMARY="zai/glm-4.7"
-  AUTH_CHOICE="zai-api-key"
-  ask "请输入 Z.AI API Key (sk-...):"
-  read -r API_KEY
-  [[ -z "$API_KEY" ]] && die "API Key 不能为空"
-  ENV_VARS="ZAI_API_KEY=${API_KEY}"
-  ONBOARD_AUTH_ARGS="--auth-choice zai-api-key --zai-api-key ${API_KEY}"
-  MODEL_CONFIG=""
-}
-
 setup_claude_proxy() {
-  MODEL_PROVIDER="custom-claude"
-  ask "请输入中转 API 地址 (如 https://api.example.com/v1):"
-  read -r BASE_URL
-  [[ -z "$BASE_URL" ]] && die "API 地址不能为空"
+  USE_ONBOARD=false
+  ask "请输入中转 API 地址 (如 https://api.example.com/claude):"
+  read -r PROXY_URL
+  [[ -z "$PROXY_URL" ]] && die "地址不能为空"
   ask "请输入 API Key:"
-  read -r API_KEY
-  [[ -z "$API_KEY" ]] && die "API Key 不能为空"
-  ask "请输入模型 ID (默认 claude-sonnet-4-5):"
-  read -r MODEL_ID
-  MODEL_ID="${MODEL_ID:-claude-sonnet-4-5}"
-  ask "请输入模型显示名称 (默认 Claude Sonnet 4.5):"
-  read -r MODEL_NAME
-  MODEL_NAME="${MODEL_NAME:-Claude Sonnet 4.5}"
+  read -r PROXY_KEY
+  [[ -z "$PROXY_KEY" ]] && die "Key 不能为空"
 
-  MODEL_PRIMARY="custom-claude/${MODEL_ID}"
-  AUTH_CHOICE="skip"
-  ENV_VARS=""
-  ONBOARD_AUTH_ARGS="--auth-choice skip"
-  MODEL_CONFIG=$(cat <<EOF
-  "models": {
-    "mode": "merge",
-    "providers": {
-      "custom-claude": {
-        "baseUrl": "${BASE_URL}",
-        "auth": "api-key",
-        "api": "anthropic-messages",
-        "apiKey": "${API_KEY}",
-        "models": [
-          {
-            "id": "${MODEL_ID}",
-            "name": "${MODEL_NAME}",
-            "contextWindow": 200000,
-            "maxTokens": 8192
-          }
-        ]
-      }
+  echo ""
+  echo "  可选模型:"
+  echo "    1) claude-opus-4-6 (最强)"
+  echo "    2) claude-sonnet-4-5 (均衡)"
+  echo "    3) 自定义模型 ID"
+  ask "请选择 [1-3] (默认 1):"
+  read -r m
+  case "${m:-1}" in
+    1) P_MODEL_ID="claude-opus-4-6"; P_MODEL_NAME="Claude Opus 4.6" ;;
+    2) P_MODEL_ID="claude-sonnet-4-5"; P_MODEL_NAME="Claude Sonnet 4.5" ;;
+    3) ask "模型 ID:"; read -r P_MODEL_ID; ask "显示名称:"; read -r P_MODEL_NAME ;;
+    *) P_MODEL_ID="claude-opus-4-6"; P_MODEL_NAME="Claude Opus 4.6" ;;
+  esac
+
+  ask "给这个中转取个名字 (如 my-proxy, 默认 claude-proxy):"
+  read -r PROVIDER_ID
+  PROVIDER_ID="${PROVIDER_ID:-claude-proxy}"
+
+  # 生成 JSON 片段，后面用 python3 合并到配置
+  CUSTOM_PROVIDER_JSON=$(cat <<EOJSON
+{
+  "providers": {
+    "${PROVIDER_ID}": {
+      "baseUrl": "${PROXY_URL}",
+      "auth": "api-key",
+      "api": "anthropic-messages",
+      "apiKey": "${PROXY_KEY}",
+      "models": [
+        {
+          "id": "${P_MODEL_ID}",
+          "name": "${P_MODEL_NAME}",
+          "contextWindow": 200000,
+          "maxTokens": 8192
+        }
+      ]
     }
-  },
-EOF
+  }
+}
+EOJSON
 )
+  CUSTOM_PRIMARY="${PROVIDER_ID}/${P_MODEL_ID}"
+  CUSTOM_ALIAS="${P_MODEL_NAME}"
 }
 
 setup_openai_proxy() {
-  MODEL_PROVIDER="custom-openai"
+  USE_ONBOARD=false
   ask "请输入中转 API 地址 (如 https://api.example.com/v1):"
-  read -r BASE_URL
-  [[ -z "$BASE_URL" ]] && die "API 地址不能为空"
+  read -r PROXY_URL
+  [[ -z "$PROXY_URL" ]] && die "地址不能为空"
   ask "请输入 API Key:"
-  read -r API_KEY
-  [[ -z "$API_KEY" ]] && die "API Key 不能为空"
-  ask "请输入模型 ID (默认 gpt-4o):"
-  read -r MODEL_ID
-  MODEL_ID="${MODEL_ID:-gpt-4o}"
-  ask "请输入模型显示名称 (默认 GPT-4o):"
-  read -r MODEL_NAME
-  MODEL_NAME="${MODEL_NAME:-GPT-4o}"
+  read -r PROXY_KEY
+  [[ -z "$PROXY_KEY" ]] && die "Key 不能为空"
 
-  MODEL_PRIMARY="custom-openai/${MODEL_ID}"
-  AUTH_CHOICE="skip"
-  ENV_VARS=""
-  ONBOARD_AUTH_ARGS="--auth-choice skip"
-  MODEL_CONFIG=$(cat <<EOF
-  "models": {
-    "mode": "merge",
-    "providers": {
-      "custom-openai": {
-        "baseUrl": "${BASE_URL}",
-        "auth": "api-key",
-        "api": "openai-completions",
-        "apiKey": "${API_KEY}",
-        "models": [
-          {
-            "id": "${MODEL_ID}",
-            "name": "${MODEL_NAME}",
-            "contextWindow": 128000,
-            "maxTokens": 4096
-          }
-        ]
-      }
+  echo ""
+  echo "  可选模型:"
+  echo "    1) gpt-5.2"
+  echo "    2) gpt-codex-5.3"
+  echo "    3) gpt-4.1"
+  echo "    4) o3"
+  echo "    5) 自定义模型 ID"
+  ask "请选择 [1-5] (默认 1):"
+  read -r m
+  case "${m:-1}" in
+    1) P_MODEL_ID="gpt-5.2"; P_MODEL_NAME="GPT-5.2" ;;
+    2) P_MODEL_ID="gpt-codex-5.3"; P_MODEL_NAME="GPT Codex 5.3" ;;
+    3) P_MODEL_ID="gpt-4.1"; P_MODEL_NAME="GPT-4.1" ;;
+    4) P_MODEL_ID="o3"; P_MODEL_NAME="o3" ;;
+    5) ask "模型 ID:"; read -r P_MODEL_ID; ask "显示名称:"; read -r P_MODEL_NAME ;;
+    *) P_MODEL_ID="gpt-5.2"; P_MODEL_NAME="GPT-5.2" ;;
+  esac
+
+  ask "给这个中转取个名字 (默认 openai-proxy):"
+  read -r PROVIDER_ID
+  PROVIDER_ID="${PROVIDER_ID:-openai-proxy}"
+
+  CUSTOM_PROVIDER_JSON=$(cat <<EOJSON
+{
+  "providers": {
+    "${PROVIDER_ID}": {
+      "baseUrl": "${PROXY_URL}",
+      "auth": "api-key",
+      "api": "openai-completions",
+      "apiKey": "${PROXY_KEY}",
+      "models": [
+        {
+          "id": "${P_MODEL_ID}",
+          "name": "${P_MODEL_NAME}",
+          "contextWindow": 128000,
+          "maxTokens": 8192
+        }
+      ]
     }
-  },
-EOF
+  }
+}
+EOJSON
 )
+  CUSTOM_PRIMARY="${PROVIDER_ID}/${P_MODEL_ID}"
+  CUSTOM_ALIAS="${P_MODEL_NAME}"
 }
 
 # ========== 渠道选择 ==========
+# 全部用 openclaw channels add CLI
 choose_channels() {
   step "选择消息渠道"
   echo ""
-  echo "  1) Telegram — 推荐，设置最简单"
-  echo "  2) Discord — 游戏/社区常用"
-  echo "  3) 飞书 (Feishu) — 企业协作"
-  echo "  4) WebChat — 内置网页聊天 (无需额外配置)"
-  echo "  5) 跳过渠道配置"
+  echo "  1) Telegram — 最简单，推荐"
+  echo "  2) Discord"
+  echo "  3) Slack"
+  echo "  4) WhatsApp — 需要扫码"
+  echo "  5) Signal"
+  echo "  6) 飞书 (Feishu)"
+  echo "  7) WebChat — 内置，无需配置"
+  echo "  8) 跳过"
   echo ""
-  ask "请选择 [1-5] (可多选，用逗号分隔，如 1,4):"
+  ask "请选择 [1-8] (可多选，逗号分隔，如 1,7):"
   read -r ch_choices
 
-  CHANNEL_CONFIG=""
-  TELEGRAM_TOKEN=""
-  DISCORD_TOKEN=""
-  FEISHU_APP_ID=""
-  FEISHU_APP_SECRET=""
+  CHANNELS_TO_ADD=()
   NEED_FEISHU_PLUGIN=false
 
   IFS=',' read -ra chs <<< "$ch_choices"
   for ch in "${chs[@]}"; do
     ch=$(echo "$ch" | tr -d ' ')
     case "$ch" in
-      1) setup_telegram ;;
-      2) setup_discord ;;
-      3) setup_feishu ;;
-      4) info "WebChat 无需额外配置，启动 Gateway 后即可使用" ;;
-      5) info "跳过渠道配置" ;;
-      *) warn "忽略无效选项: $ch" ;;
+      1)
+        ask "Telegram Bot Token (从 @BotFather 获取):"
+        read -r TG_TOKEN
+        if [[ -n "$TG_TOKEN" ]]; then
+          CHANNELS_TO_ADD+=("telegram:${TG_TOKEN}")
+          info "Telegram ✓"
+        fi
+        ;;
+      2)
+        ask "Discord Bot Token:"
+        read -r DC_TOKEN
+        if [[ -n "$DC_TOKEN" ]]; then
+          CHANNELS_TO_ADD+=("discord:${DC_TOKEN}")
+          info "Discord ✓"
+        fi
+        ;;
+      3)
+        ask "Slack Bot Token (xoxb-...):"
+        read -r SL_BOT
+        ask "Slack App Token (xapp-...):"
+        read -r SL_APP
+        if [[ -n "$SL_BOT" && -n "$SL_APP" ]]; then
+          CHANNELS_TO_ADD+=("slack:${SL_BOT}:${SL_APP}")
+          info "Slack ✓"
+        fi
+        ;;
+      4)
+        info "WhatsApp 需要启动后扫码，稍后配置"
+        CHANNELS_TO_ADD+=("whatsapp:")
+        ;;
+      5)
+        ask "Signal 号码 (如 +8613800138000):"
+        read -r SIG_NUM
+        if [[ -n "$SIG_NUM" ]]; then
+          CHANNELS_TO_ADD+=("signal:${SIG_NUM}")
+          info "Signal ✓"
+        fi
+        ;;
+      6)
+        NEED_FEISHU_PLUGIN=true
+        ask "飞书 App ID (cli_xxx):"
+        read -r FS_ID
+        ask "飞书 App Secret:"
+        read -r FS_SECRET
+        if [[ -n "$FS_ID" && -n "$FS_SECRET" ]]; then
+          CHANNELS_TO_ADD+=("feishu:${FS_ID}:${FS_SECRET}")
+          info "飞书 ✓"
+        else
+          NEED_FEISHU_PLUGIN=false
+        fi
+        ;;
+      7) info "WebChat 无需配置，启动 Gateway 后自动可用" ;;
+      8) info "跳过渠道配置" ;;
     esac
   done
 }
 
-setup_telegram() {
-  ask "请输入 Telegram Bot Token (从 @BotFather 获取):"
-  read -r TELEGRAM_TOKEN
-  [[ -z "$TELEGRAM_TOKEN" ]] && { warn "Telegram Token 为空，跳过"; return; }
-  CHANNEL_CONFIG="${CHANNEL_CONFIG}
-    \"telegram\": {
-      \"enabled\": true,
-      \"botToken\": \"${TELEGRAM_TOKEN}\",
-      \"dmPolicy\": \"pairing\"
-    },"
-  info "Telegram 配置完成"
+# ========== 执行配置 ==========
+apply_config() {
+  step "应用配置"
+
+  if [[ "$USE_ONBOARD" == "true" ]]; then
+    # 官方 API：用 openclaw onboard 原生命令
+    info "使用 openclaw onboard 配置模型..."
+    openclaw onboard --non-interactive \
+      --accept-risk \
+      --mode local \
+      ${ONBOARD_ARGS} \
+      --gateway-port 18789 \
+      --gateway-bind loopback \
+      --gateway-auth token \
+      --skip-channels \
+      --skip-skills \
+      --skip-health \
+      --skip-ui \
+      --install-daemon 2>&1 | tail -10 || warn "onboard 可能有警告，继续..."
+    info "模型配置完成"
+  else
+    # 中转 API：先用 skip 跑 onboard 建基础配置，再注入 provider
+    info "初始化基础配置..."
+    openclaw onboard --non-interactive \
+      --accept-risk \
+      --mode local \
+      --auth-choice skip \
+      --gateway-port 18789 \
+      --gateway-bind loopback \
+      --gateway-auth token \
+      --skip-channels \
+      --skip-skills \
+      --skip-health \
+      --skip-ui \
+      --install-daemon 2>&1 | tail -5 || warn "onboard 可能有警告，继续..."
+
+    # 用 python3 安全地合并 provider 到配置
+    info "注入中转 API 配置..."
+    python3 -c "
+import json, sys
+
+config_path = '$HOME/.openclaw/openclaw.json'
+with open(config_path) as f:
+    config = json.load(f)
+
+provider_json = json.loads('''${CUSTOM_PROVIDER_JSON}''')
+
+# 合并 providers
+if 'models' not in config:
+    config['models'] = {}
+if 'providers' not in config['models']:
+    config['models']['providers'] = {}
+config['models']['providers'].update(provider_json['providers'])
+
+# 设置 primary model
+if 'agents' not in config:
+    config['agents'] = {}
+if 'defaults' not in config['agents']:
+    config['agents']['defaults'] = {}
+config['agents']['defaults']['model'] = {
+    'primary': '${CUSTOM_PRIMARY}',
+    'fallbacks': []
 }
-
-setup_discord() {
-  ask "请输入 Discord Bot Token:"
-  read -r DISCORD_TOKEN
-  [[ -z "$DISCORD_TOKEN" ]] && { warn "Discord Token 为空，跳过"; return; }
-  CHANNEL_CONFIG="${CHANNEL_CONFIG}
-    \"discord\": {
-      \"enabled\": true,
-      \"token\": \"${DISCORD_TOKEN}\"
-    },"
-  info "Discord 配置完成"
-}
-
-setup_feishu() {
-  NEED_FEISHU_PLUGIN=true
-  ask "请输入飞书 App ID (cli_xxx):"
-  read -r FEISHU_APP_ID
-  [[ -z "$FEISHU_APP_ID" ]] && { warn "飞书 App ID 为空，跳过"; NEED_FEISHU_PLUGIN=false; return; }
-  ask "请输入飞书 App Secret:"
-  read -r FEISHU_APP_SECRET
-  [[ -z "$FEISHU_APP_SECRET" ]] && { warn "飞书 App Secret 为空，跳过"; NEED_FEISHU_PLUGIN=false; return; }
-  CHANNEL_CONFIG="${CHANNEL_CONFIG}
-    \"feishu\": {
-      \"enabled\": true,
-      \"dmPolicy\": \"pairing\",
-      \"accounts\": {
-        \"main\": {
-          \"appId\": \"${FEISHU_APP_ID}\",
-          \"appSecret\": \"${FEISHU_APP_SECRET}\"
-        }
-      }
-    },"
-  info "飞书配置完成"
-}
-
-# ========== 生成配置 ==========
-generate_config() {
-  step "生成配置文件"
-  local config_dir="$HOME/.openclaw"
-  mkdir -p "$config_dir"
-
-  # 生成 gateway token
-  local gw_token
-  gw_token=$(openssl rand -hex 24 2>/dev/null || head -c 48 /dev/urandom | xxd -p | tr -d '\n' | head -c 48)
-
-  # 清理 channel config 末尾逗号
-  CHANNEL_CONFIG=$(echo "$CHANNEL_CONFIG" | sed '$ s/,$//')
-
-  # 构建 env 块
-  local env_block=""
-  if [[ -n "${ENV_VARS:-}" ]]; then
-    local key="${ENV_VARS%%=*}"
-    local val="${ENV_VARS#*=}"
-    env_block="\"env\": { \"${key}\": \"${val}\" },"
-  fi
-
-  # 构建 channels 块
-  local channels_block=""
-  if [[ -n "${CHANNEL_CONFIG:-}" ]]; then
-    channels_block="\"channels\": {${CHANNEL_CONFIG}
-  },"
-  fi
-
-  # 构建 models 块
-  local models_block="${MODEL_CONFIG:-}"
-
-  cat > "$config_dir/openclaw.json" <<EOF
-{
-  ${env_block}
-  "agents": {
-    "defaults": {
-      "maxConcurrent": 4,
-      "workspace": "${config_dir}/workspace",
-      "model": {
-        "primary": "${MODEL_PRIMARY}",
-        "fallbacks": []
-      }
+config['agents']['defaults']['models'] = {
+    '${CUSTOM_PRIMARY}': {
+        'alias': '${CUSTOM_ALIAS}'
     }
-  },
-  "gateway": {
-    "mode": "local",
-    "auth": {
-      "mode": "token",
-      "token": "${gw_token}"
-    },
-    "port": 18789,
-    "bind": "loopback",
-    "tailscale": { "mode": "off" }
-  },
-  ${channels_block}
-  ${models_block}
-  "wizard": {
-    "lastRunAt": "$(date -u +%Y-%m-%dT%H:%M:%S.000Z)",
-    "lastRunVersion": "2026.2.6-3",
-    "lastRunCommand": "install.sh",
-    "lastRunMode": "local"
-  },
-  "meta": {
-    "lastTouchedVersion": "2026.2.6-3",
-    "lastTouchedAt": "$(date -u +%Y-%m-%dT%H:%M:%S.000Z)"
-  }
-}
-EOF
-
-  # 生成 .env 文件
-  if [[ -n "${ENV_VARS:-}" ]]; then
-    echo "${ENV_VARS}" > "$config_dir/.env"
-    info ".env 文件已生成"
-  fi
-
-  # 写入 Telegram/Discord token 到 .env
-  if [[ -n "${TELEGRAM_TOKEN:-}" ]]; then
-    echo "TELEGRAM_BOT_TOKEN=${TELEGRAM_TOKEN}" >> "$config_dir/.env"
-  fi
-  if [[ -n "${DISCORD_TOKEN:-}" ]]; then
-    echo "DISCORD_BOT_TOKEN=${DISCORD_TOKEN}" >> "$config_dir/.env"
-  fi
-
-  info "配置文件已生成: $config_dir/openclaw.json"
 }
 
-# ========== 安装飞书插件 ==========
-install_feishu_plugin() {
-  if [[ "${NEED_FEISHU_PLUGIN:-false}" == "true" ]]; then
-    step "安装飞书插件"
-    openclaw plugins install @openclaw/feishu 2>&1 || warn "飞书插件安装失败，请稍后手动运行: openclaw plugins install @openclaw/feishu"
-    info "飞书插件安装完成"
+with open(config_path, 'w') as f:
+    json.dump(config, f, indent=2)
+print('Provider 配置已写入')
+" || die "配置写入失败"
+    info "中转 API 配置完成"
   fi
+
+  # 用 CLI 添加渠道
+  for ch_entry in "${CHANNELS_TO_ADD[@]:-}"; do
+    [[ -z "$ch_entry" ]] && continue
+    local ch_type="${ch_entry%%:*}"
+    local ch_data="${ch_entry#*:}"
+
+    case "$ch_type" in
+      telegram)
+        [[ -n "$ch_data" ]] && {
+          openclaw channels add --channel telegram --token "$ch_data" 2>&1 || warn "Telegram 添加失败，请手动: openclaw channels add --channel telegram --token YOUR_TOKEN"
+          info "Telegram 渠道已添加"
+        }
+        ;;
+      discord)
+        [[ -n "$ch_data" ]] && {
+          openclaw channels add --channel discord --token "$ch_data" 2>&1 || warn "Discord 添加失败"
+          info "Discord 渠道已添加"
+        }
+        ;;
+      slack)
+        local sl_bot="${ch_data%%:*}"
+        local sl_app="${ch_data#*:}"
+        openclaw channels add --channel slack --bot-token "$sl_bot" --app-token "$sl_app" 2>&1 || warn "Slack 添加失败"
+        info "Slack 渠道已添加"
+        ;;
+      whatsapp)
+        openclaw channels add --channel whatsapp 2>&1 || warn "WhatsApp 添加失败"
+        info "WhatsApp 已添加，启动后需要扫码"
+        ;;
+      signal)
+        openclaw channels add --channel signal --signal-number "$ch_data" 2>&1 || warn "Signal 添加失败"
+        info "Signal 渠道已添加"
+        ;;
+      feishu)
+        # 飞书需要先装插件
+        if [[ "${NEED_FEISHU_PLUGIN}" == "true" ]]; then
+          openclaw plugins install @openclaw/feishu 2>&1 || warn "飞书插件安装失败"
+        fi
+        # 飞书的 channels add 可能不支持直接传参，需要写配置
+        local fs_id="${ch_data%%:*}"
+        local fs_secret="${ch_data#*:}"
+        python3 -c "
+import json
+config_path = '$HOME/.openclaw/openclaw.json'
+with open(config_path) as f:
+    config = json.load(f)
+if 'channels' not in config:
+    config['channels'] = {}
+config['channels']['feishu'] = {
+    'enabled': True,
+    'dmPolicy': 'pairing',
+    'accounts': {
+        'main': {
+            'appId': '${fs_id}',
+            'appSecret': '${fs_secret}'
+        }
+    }
+}
+with open(config_path, 'w') as f:
+    json.dump(config, f, indent=2)
+" 2>&1 || warn "飞书配置写入失败"
+        info "飞书渠道已添加"
+        ;;
+    esac
+  done
 }
 
-# ========== 初始化 Workspace ==========
-init_workspace() {
-  step "初始化工作空间"
-  local ws="$HOME/.openclaw/workspace"
-  mkdir -p "$ws"
-  if [[ ! -f "$ws/AGENTS.md" ]]; then
-    openclaw setup 2>&1 || warn "workspace 初始化可能不完整"
-  fi
-  info "工作空间就绪: $ws"
-}
-
-# ========== 启动 Gateway ==========
+# ========== 启动 ==========
 start_gateway() {
   step "启动 Gateway"
-  ask "是否安装 Gateway 为系统服务并启动? (Y/n)"
-  read -r ans
-  if [[ "${ans,,}" == "n" ]]; then
-    info "跳过 Gateway 启动。你可以稍后运行:"
-    echo "  openclaw gateway install"
-    echo "  openclaw gateway start"
-    return 0
-  fi
-
-  openclaw gateway install 2>&1 || warn "Gateway 服务安装失败"
-  openclaw gateway start 2>&1 || warn "Gateway 启动失败"
-
+  openclaw gateway restart 2>&1 || openclaw gateway start 2>&1 || warn "Gateway 启动失败"
   sleep 2
-  if openclaw gateway status 2>&1 | grep -qi "running"; then
+  if openclaw gateway status 2>&1 | grep -qi "running\|online\|listening"; then
     info "Gateway 已启动 ✓"
   else
     warn "Gateway 可能未正常启动，请检查: openclaw gateway status"
   fi
+}
+
+# ========== 验证 ==========
+verify() {
+  step "验证配置"
+  echo ""
+
+  # 检查配置文件
+  if [[ -f "$HOME/.openclaw/openclaw.json" ]]; then
+    info "配置文件存在 ✓"
+  else
+    err "配置文件不存在!"
+  fi
+
+  # 检查模型
+  local primary
+  primary=$(python3 -c "
+import json
+with open('$HOME/.openclaw/openclaw.json') as f:
+    c = json.load(f)
+print(c.get('agents',{}).get('defaults',{}).get('model',{}).get('primary','未配置'))
+" 2>/dev/null || echo "未知")
+  info "主模型: ${primary}"
+
+  # 检查渠道
+  openclaw channels list 2>&1 | head -10 || true
+
+  # 健康检查
+  openclaw doctor 2>&1 | tail -5 || true
 }
 
 # ========== 完成 ==========
@@ -477,30 +542,15 @@ finish() {
   step "安装完成! 🎉"
   echo ""
   echo -e "  ${BOLD}常用命令:${NC}"
-  echo "    openclaw gateway status    — 查看 Gateway 状态"
-  echo "    openclaw gateway restart   — 重启 Gateway"
+  echo "    openclaw gateway status    — 查看状态"
+  echo "    openclaw gateway restart   — 重启"
   echo "    openclaw doctor            — 健康检查"
-  echo "    openclaw dashboard         — 打开控制面板"
-  echo "    openclaw logs --follow     — 查看实时日志"
+  echo "    openclaw channels list     — 查看渠道"
+  echo "    openclaw models status     — 查看模型"
   echo ""
-  if [[ -n "${TELEGRAM_TOKEN:-}" ]]; then
-    echo -e "  ${BOLD}Telegram:${NC}"
-    echo "    在 Telegram 中找到你的 Bot 并发送消息"
-    echo "    首次需要配对: openclaw pairing approve telegram <CODE>"
-    echo ""
-  fi
-  if [[ -n "${DISCORD_TOKEN:-}" ]]; then
-    echo -e "  ${BOLD}Discord:${NC}"
-    echo "    邀请 Bot 到你的服务器并 @提及它"
-    echo "    DM 首次需要配对: openclaw pairing approve discord <CODE>"
-    echo ""
-  fi
-  if [[ "${NEED_FEISHU_PLUGIN:-false}" == "true" ]]; then
-    echo -e "  ${BOLD}飞书:${NC}"
-    echo "    确保飞书应用已发布并配置了事件订阅"
-    echo "    首次需要配对: openclaw pairing approve feishu <CODE>"
-    echo ""
-  fi
+  echo -e "  ${BOLD}WebChat:${NC}"
+  echo "    浏览器打开 http://localhost:18789"
+  echo ""
   echo -e "  ${BOLD}文档:${NC} https://docs.openclaw.ai"
   echo ""
 }
@@ -508,8 +558,8 @@ finish() {
 # ========== 主流程 ==========
 main() {
   echo ""
-  echo -e "${BOLD}🦞 OpenClaw 一键安装脚本${NC}"
-  echo -e "   支持 Ubuntu 22.04+ / Debian 12+ / macOS"
+  echo -e "${BOLD}🦞 OpenClaw 一键安装脚本 v2${NC}"
+  echo -e "   基于 OpenClaw CLI 原生命令，确保配置正确"
   echo ""
 
   detect_os
@@ -517,10 +567,9 @@ main() {
   ensure_openclaw
   choose_model
   choose_channels
-  generate_config
-  install_feishu_plugin
-  init_workspace
+  apply_config
   start_gateway
+  verify
   finish
 }
 
