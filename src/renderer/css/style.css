@@ -1,0 +1,270 @@
+/* ── Reset & Base ── */
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+:root {
+  --bg: #1a1a2e;
+  --bg-card: #16213e;
+  --bg-sidebar: #0f3460;
+  --text: #e0e0e0;
+  --text-dim: #888;
+  --accent: #e94560;
+  --accent-hover: #ff6b81;
+  --green: #2ecc71;
+  --yellow: #f39c12;
+  --red: #e74c3c;
+  --border: #2a2a4a;
+  --radius: 8px;
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  height: 100vh;
+  overflow: hidden;
+}
+
+#app {
+  display: flex;
+  height: 100vh;
+}
+
+/* ── Sidebar ── */
+#sidebar {
+  width: 200px;
+  background: var(--bg-sidebar);
+  display: flex;
+  flex-direction: column;
+  padding: 16px 0;
+  flex-shrink: 0;
+}
+
+.logo {
+  font-size: 20px;
+  font-weight: bold;
+  padding: 0 16px 16px;
+  border-bottom: 1px solid rgba(255,255,255,0.1);
+  margin-bottom: 8px;
+}
+
+.nav-items {
+  flex: 1;
+}
+
+.nav-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 10px 16px;
+  background: none;
+  border: none;
+  color: var(--text-dim);
+  font-size: 14px;
+  cursor: pointer;
+  text-align: left;
+  transition: all 0.2s;
+}
+
+.nav-item:hover { background: rgba(255,255,255,0.05); color: var(--text); }
+.nav-item.active { background: rgba(233,69,96,0.15); color: var(--accent); border-right: 3px solid var(--accent); }
+
+.nav-footer { padding: 16px; }
+
+.indicator {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+}
+
+.indicator .dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--red);
+}
+
+.indicator.running .dot { background: var(--green); }
+.indicator.starting .dot { background: var(--yellow); animation: pulse 1s infinite; }
+
+@keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
+
+/* ── Main Content ── */
+#content {
+  flex: 1;
+  padding: 24px;
+  overflow-y: auto;
+}
+
+.page h1 {
+  font-size: 24px;
+  margin-bottom: 20px;
+}
+
+/* ── Status Grid ── */
+.status-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 16px;
+}
+
+.status-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 16px;
+}
+
+.status-title { font-size: 12px; color: var(--text-dim); margin-bottom: 8px; }
+.status-value { font-size: 18px; font-weight: bold; }
+.status-actions { margin-top: 12px; }
+
+/* ── Buttons ── */
+.btn {
+  padding: 8px 16px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-card);
+  color: var(--text);
+  cursor: pointer;
+  font-size: 14px;
+  transition: all 0.2s;
+}
+
+.btn:hover { border-color: var(--accent); }
+.btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: white; }
+.btn.primary:hover { background: var(--accent-hover); }
+.btn.danger { background: var(--red); border-color: var(--red); color: white; }
+.btn.small { padding: 4px 12px; font-size: 12px; }
+
+/* ── Wizard ── */
+.wizard {
+  max-width: 700px;
+  margin: 0 auto;
+}
+
+.wizard-header {
+  text-align: center;
+  margin-bottom: 32px;
+}
+
+.wizard-header h1 { font-size: 28px; }
+.wizard-header p { color: var(--text-dim); margin-top: 8px; }
+
+.wizard-step h2 { font-size: 20px; margin-bottom: 16px; }
+
+.wizard-buttons {
+  display: flex;
+  gap: 12px;
+  margin-top: 24px;
+}
+
+.hint { color: var(--text-dim); font-size: 14px; margin-bottom: 16px; }
+
+/* ── Check List ── */
+.check-list { margin: 16px 0; }
+
+.check-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  margin-bottom: 8px;
+}
+
+.check-icon { font-size: 20px; width: 28px; text-align: center; }
+.check-label { flex: 1; }
+.check-value { color: var(--text-dim); font-size: 13px; }
+
+/* ── Model Cards ── */
+.model-cards, .channel-cards { display: flex; flex-direction: column; gap: 12px; }
+
+.model-card, .channel-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 16px;
+}
+
+.model-card.disabled, .channel-card.disabled { opacity: 0.5; }
+
+.model-header label, .channel-card > label {
+  font-size: 16px;
+  font-weight: bold;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.model-body, .channel-body { margin-top: 12px; }
+
+.badge {
+  font-size: 11px;
+  background: var(--accent);
+  color: white;
+  padding: 2px 8px;
+  border-radius: 10px;
+  margin-left: 8px;
+}
+
+/* ── Forms ── */
+.form-group {
+  margin-bottom: 12px;
+}
+
+.form-group label {
+  display: block;
+  font-size: 13px;
+  color: var(--text-dim);
+  margin-bottom: 4px;
+}
+
+.form-group input, .form-group select {
+  width: 100%;
+  padding: 8px 12px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--text);
+  font-size: 14px;
+}
+
+.form-group input:focus, .form-group select:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.help-link {
+  font-size: 12px;
+  color: var(--accent);
+  text-decoration: none;
+  margin-top: 4px;
+  display: inline-block;
+}
+
+.help-link:hover { text-decoration: underline; }
+
+/* ── Log Box ── */
+.log-box {
+  background: #0a0a1a;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 16px;
+  font-family: 'Cascadia Code', 'Fira Code', monospace;
+  font-size: 12px;
+  line-height: 1.6;
+  height: 500px;
+  overflow-y: auto;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+/* ── Links ── */
+a { color: var(--accent); text-decoration: none; }
+a:hover { text-decoration: underline; }

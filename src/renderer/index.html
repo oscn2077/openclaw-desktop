@@ -1,0 +1,321 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>OpenClaw Desktop</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <div id="app">
+    <!-- Sidebar -->
+    <nav id="sidebar">
+      <div class="logo">🦞 OpenClaw</div>
+      <div class="nav-items">
+        <button class="nav-item active" data-page="status" onclick="showPage('status')">
+          <span class="icon">📊</span> 状态
+        </button>
+        <button class="nav-item" data-page="models" onclick="showPage('models')">
+          <span class="icon">🧠</span> 模型
+        </button>
+        <button class="nav-item" data-page="channels" onclick="showPage('channels')">
+          <span class="icon">💬</span> 渠道
+        </button>
+        <button class="nav-item" data-page="chat" onclick="showPage('chat')">
+          <span class="icon">🗨️</span> 对话
+        </button>
+        <button class="nav-item" data-page="logs" onclick="showPage('logs')">
+          <span class="icon">📋</span> 日志
+        </button>
+        <button class="nav-item" data-page="settings" onclick="showPage('settings')">
+          <span class="icon">⚙️</span> 设置
+        </button>
+      </div>
+      <div class="nav-footer">
+        <div id="gateway-indicator" class="indicator stopped">
+          <span class="dot"></span>
+          <span class="text">已停止</span>
+        </div>
+      </div>
+    </nav>
+
+    <!-- Main Content -->
+    <main id="content">
+      <!-- Setup Wizard (shown on first run) -->
+      <div id="page-wizard" class="page" style="display:none;">
+        <div class="wizard">
+          <div class="wizard-header">
+            <h1>🦞 欢迎使用 OpenClaw Desktop</h1>
+            <p>让我们花 2 分钟完成初始设置</p>
+          </div>
+
+          <!-- Step 1: Environment Check -->
+          <div class="wizard-step" id="step-1">
+            <h2>第 1 步：环境检测</h2>
+            <div id="env-check" class="check-list">
+              <div class="check-item" id="check-os">
+                <span class="check-icon">⏳</span>
+                <span class="check-label">操作系统</span>
+                <span class="check-value"></span>
+              </div>
+              <div class="check-item" id="check-node">
+                <span class="check-icon">⏳</span>
+                <span class="check-label">Node.js</span>
+                <span class="check-value"></span>
+              </div>
+              <div class="check-item" id="check-openclaw">
+                <span class="check-icon">⏳</span>
+                <span class="check-label">OpenClaw</span>
+                <span class="check-value"></span>
+              </div>
+            </div>
+            <div id="env-actions" style="display:none;"></div>
+            <button class="btn primary" id="btn-step1-next" onclick="wizardNext(2)" disabled>下一步</button>
+          </div>
+
+          <!-- Step 2: Model Setup -->
+          <div class="wizard-step" id="step-2" style="display:none;">
+            <h2>第 2 步：配置 AI 模型</h2>
+            <p class="hint">至少配置一个模型即可开始使用</p>
+
+            <div class="model-cards">
+              <!-- Claude -->
+              <div class="model-card" id="model-claude">
+                <div class="model-header">
+                  <label><input type="checkbox" id="enable-claude" onchange="toggleModel('claude')"> Claude (Anthropic)</label>
+                </div>
+                <div class="model-body" style="display:none;">
+                  <div class="form-group">
+                    <label>接入方式</label>
+                    <select id="claude-type" onchange="toggleProxyFields('claude')">
+                      <option value="official">官方 API</option>
+                      <option value="proxy">中转 API</option>
+                    </select>
+                  </div>
+                  <div class="form-group proxy-field" id="claude-proxy-url" style="display:none;">
+                    <label>中转地址</label>
+                    <input type="text" id="claude-base-url" placeholder="https://your-proxy.com/claude">
+                  </div>
+                  <div class="form-group">
+                    <label>API Key</label>
+                    <input type="password" id="claude-api-key" placeholder="sk-...">
+                  </div>
+                  <div class="form-group">
+                    <label>默认模型</label>
+                    <select id="claude-model">
+                      <option value="claude-opus-4-6">Claude Opus 4.6</option>
+                      <option value="claude-sonnet-4-5">Claude Sonnet 4.5</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+
+              <!-- OpenAI -->
+              <div class="model-card" id="model-openai">
+                <div class="model-header">
+                  <label><input type="checkbox" id="enable-openai" onchange="toggleModel('openai')"> OpenAI</label>
+                </div>
+                <div class="model-body" style="display:none;">
+                  <div class="form-group">
+                    <label>接入方式</label>
+                    <select id="openai-type" onchange="toggleProxyFields('openai')">
+                      <option value="official">官方 API</option>
+                      <option value="proxy">中转 API</option>
+                    </select>
+                  </div>
+                  <div class="form-group proxy-field" id="openai-proxy-url" style="display:none;">
+                    <label>中转地址</label>
+                    <input type="text" id="openai-base-url" placeholder="https://your-proxy.com/v1">
+                  </div>
+                  <div class="form-group">
+                    <label>API Key</label>
+                    <input type="password" id="openai-api-key" placeholder="sk-...">
+                  </div>
+                  <div class="form-group">
+                    <label>默认模型</label>
+                    <select id="openai-model">
+                      <option value="gpt-5.2">GPT-5.2</option>
+                      <option value="gpt-codex-5.3">GPT Codex 5.3</option>
+                      <option value="gpt-4.1">GPT-4.1</option>
+                      <option value="o3">o3</option>
+                      <option value="o4-mini">o4-mini</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Gemini -->
+              <div class="model-card" id="model-gemini">
+                <div class="model-header">
+                  <label><input type="checkbox" id="enable-gemini" onchange="toggleModel('gemini')"> Google Gemini</label>
+                </div>
+                <div class="model-body" style="display:none;">
+                  <div class="form-group">
+                    <label>API Key (Google AI Studio)</label>
+                    <input type="password" id="gemini-api-key" placeholder="AIzaSy...">
+                    <a href="#" onclick="api.openExternal('https://aistudio.google.com/apikey'); return false;" class="help-link">获取免费 API Key →</a>
+                  </div>
+                  <div class="form-group">
+                    <label>默认模型</label>
+                    <select id="gemini-model">
+                      <option value="gemini-3-flash">Gemini 3 Flash</option>
+                      <option value="gemini-2.5-flash">Gemini 2.5 Flash</option>
+                      <option value="gemini-2.5-pro">Gemini 2.5 Pro</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+
+              <!-- GLM -->
+              <div class="model-card" id="model-glm">
+                <div class="model-header">
+                  <label><input type="checkbox" id="enable-glm" onchange="toggleModel('glm')"> 智谱 GLM</label>
+                </div>
+                <div class="model-body" style="display:none;">
+                  <div class="form-group">
+                    <label>API Key</label>
+                    <input type="password" id="glm-api-key" placeholder="your-api-key">
+                    <a href="#" onclick="api.openExternal('https://open.bigmodel.cn/'); return false;" class="help-link">获取 API Key →</a>
+                  </div>
+                  <div class="form-group">
+                    <label>默认模型</label>
+                    <select id="glm-model">
+                      <option value="glm-4.7-flash">GLM-4.7 Flash (免费)</option>
+                      <option value="glm-4.7">GLM-4.7</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div class="wizard-buttons">
+              <button class="btn" onclick="wizardNext(1)">上一步</button>
+              <button class="btn primary" id="btn-step2-next" onclick="wizardNext(3)">下一步</button>
+            </div>
+          </div>
+
+          <!-- Step 3: Channel Setup -->
+          <div class="wizard-step" id="step-3" style="display:none;">
+            <h2>第 3 步：聊天渠道（可选）</h2>
+            <p class="hint">先跳过也行，网页版聊天开箱即用</p>
+
+            <div class="channel-cards">
+              <div class="channel-card">
+                <label><input type="checkbox" id="enable-telegram" onchange="toggleChannel('telegram')"> Telegram</label>
+                <div class="channel-body" style="display:none;">
+                  <div class="form-group">
+                    <label>Bot Token</label>
+                    <input type="password" id="telegram-token" placeholder="123456:ABC-DEF...">
+                    <a href="#" onclick="api.openExternal('https://t.me/BotFather'); return false;" class="help-link">从 @BotFather 获取 →</a>
+                  </div>
+                </div>
+              </div>
+
+              <div class="channel-card">
+                <label><input type="checkbox" id="enable-discord" onchange="toggleChannel('discord')"> Discord</label>
+                <div class="channel-body" style="display:none;">
+                  <div class="form-group">
+                    <label>Bot Token</label>
+                    <input type="password" id="discord-token" placeholder="your-bot-token">
+                  </div>
+                </div>
+              </div>
+
+              <div class="channel-card">
+                <label><input type="checkbox" id="enable-feishu" onchange="toggleChannel('feishu')"> 飞书</label>
+                <div class="channel-body" style="display:none;">
+                  <div class="form-group">
+                    <label>App ID</label>
+                    <input type="text" id="feishu-app-id" placeholder="cli_xxx">
+                  </div>
+                  <div class="form-group">
+                    <label>App Secret</label>
+                    <input type="password" id="feishu-app-secret" placeholder="your-app-secret">
+                  </div>
+                </div>
+              </div>
+
+              <div class="channel-card disabled">
+                <label>微信 <span class="badge">即将支持</span></label>
+              </div>
+
+              <div class="channel-card disabled">
+                <label>钉钉 <span class="badge">即将支持</span></label>
+              </div>
+            </div>
+
+            <div class="wizard-buttons">
+              <button class="btn" onclick="wizardNext(2)">上一步</button>
+              <button class="btn primary" onclick="finishWizard()">🚀 完成设置</button>
+              <button class="btn" onclick="finishWizard()">跳过，直接开始</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Status Page -->
+      <div id="page-status" class="page">
+        <h1>📊 系统状态</h1>
+        <div class="status-grid">
+          <div class="status-card" id="status-gateway">
+            <div class="status-title">Gateway</div>
+            <div class="status-value" id="status-gateway-value">检测中...</div>
+            <div class="status-actions">
+              <button class="btn small primary" id="btn-start" onclick="startGateway()">启动</button>
+              <button class="btn small danger" id="btn-stop" onclick="stopGateway()" style="display:none;">停止</button>
+            </div>
+          </div>
+          <div class="status-card">
+            <div class="status-title">主模型</div>
+            <div class="status-value" id="status-model">未配置</div>
+          </div>
+          <div class="status-card">
+            <div class="status-title">聊天渠道</div>
+            <div class="status-value" id="status-channels">未配置</div>
+          </div>
+          <div class="status-card">
+            <div class="status-title">WebChat</div>
+            <div class="status-value">
+              <a href="#" id="webchat-link" onclick="openWebChat(); return false;">打开网页聊天 →</a>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Models Page -->
+      <div id="page-models" class="page" style="display:none;">
+        <h1>🧠 模型管理</h1>
+        <p>管理你的 AI 模型接入（开发中...）</p>
+      </div>
+
+      <!-- Channels Page -->
+      <div id="page-channels" class="page" style="display:none;">
+        <h1>💬 渠道管理</h1>
+        <p>管理聊天渠道接入（开发中...）</p>
+      </div>
+
+      <!-- Chat Page -->
+      <div id="page-chat" class="page" style="display:none;">
+        <h1>🗨️ 对话</h1>
+        <div id="chat-frame-container">
+          <iframe id="chat-frame" style="width:100%;height:500px;border:1px solid #333;border-radius:8px;"></iframe>
+        </div>
+      </div>
+
+      <!-- Logs Page -->
+      <div id="page-logs" class="page" style="display:none;">
+        <h1>📋 日志</h1>
+        <pre id="log-output" class="log-box"></pre>
+      </div>
+
+      <!-- Settings Page -->
+      <div id="page-settings" class="page" style="display:none;">
+        <h1>⚙️ 设置</h1>
+        <p>高级设置（开发中...）</p>
+      </div>
+    </main>
+  </div>
+
+  <script src="js/app.js"></script>
+</body>
+</html>
