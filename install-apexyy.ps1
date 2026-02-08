@@ -54,14 +54,15 @@ $reachable = $false
         $null = Invoke-WebRequest -Uri "$_/claude/v1/messages" -Method Head -TimeoutSec 10 -UseBasicParsing -ErrorAction Stop
         Info "$_ 可达"
         $reachable = $true
-    } catch {
-        $code = $_.Exception.Response.StatusCode.value__
-        if ($code -and $code -ne 0) {
+    } catch [System.Net.WebException] {
+        if ($_.Exception.Response) {
             Info "$_ 可达"
             $reachable = $true
         } else {
             Warn "$_ 不可达"
         }
+    } catch {
+        Warn "$_ 不可达"
     }
 }
 if (-not $reachable) {
@@ -298,9 +299,14 @@ if ($CodexKey) {
 }
 $fallbacks = $fallbacks | Where-Object { $_ -ne $PrimaryRef }
 
-$config.agents.defaults.model = @{
+$modelObj = @{
     primary = $PrimaryRef
-    fallbacks = $fallbacks
+    fallbacks = @($fallbacks)
+}
+if ($config.agents.defaults.PSObject.Properties["model"]) {
+    $config.agents.defaults.model = $modelObj
+} else {
+    $config.agents.defaults | Add-Member -NotePropertyName "model" -NotePropertyValue $modelObj -Force
 }
 
 $config | ConvertTo-Json -Depth 10 | Set-Content $configPath -Encoding UTF8
