@@ -21,7 +21,7 @@ param(
     [string]$DiscordToken = ""
 )
 
-$ErrorActionPreference = "Stop"
+$ErrorActionPreference = "Continue"
 
 function Info($msg) { Write-Host "[✓] $msg" -ForegroundColor Green }
 function Warn($msg) { Write-Host "[!] $msg" -ForegroundColor Yellow }
@@ -142,7 +142,7 @@ npm config set registry https://registry.npmmirror.com/ 2>$null
 $env:SHARP_IGNORE_GLOBAL_LIBVIPS = "1"
 $ErrorActionPreference = "Continue"
 & npm install -g openclaw@latest 2>&1 | Out-Host
-$ErrorActionPreference = "Stop"
+$ErrorActionPreference = "Continue"
 try { $ocVer = openclaw --version 2>$null } catch { $ocVer = "" }
 if ($ocVer) {
     Info "OpenClaw $ocVer"
@@ -160,7 +160,7 @@ $ErrorActionPreference = "Continue"
 & openclaw onboard --non-interactive --accept-risk --mode local --auth-choice skip `
     --gateway-port 18789 --gateway-bind loopback --gateway-auth token `
     --skip-channels --skip-skills --skip-health --skip-ui --install-daemon 2>&1 | Select-Object -Last 3
-$ErrorActionPreference = "Stop"
+$ErrorActionPreference = "Continue"
 
 # 检查配置文件是否生成
 $configPath = Join-Path $env:USERPROFILE ".openclaw\openclaw.json"
