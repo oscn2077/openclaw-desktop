@@ -51,13 +51,13 @@ Step "网络连通性检查"
 $reachable = $false
 @("https://yunyi.rdzhvip.com", "https://yunyi.cfd") | ForEach-Object {
     try {
-        $response = Invoke-WebRequest -Uri "$_/claude/v1/messages" -Method Head -TimeoutSec 10 -UseBasicParsing -ErrorAction Stop
+        $null = Invoke-WebRequest -Uri "$_/claude/v1/messages" -Method Head -TimeoutSec 10 -UseBasicParsing -ErrorAction Stop
         Info "$_ 可达"
         $reachable = $true
     } catch {
         $code = $_.Exception.Response.StatusCode.value__
         if ($code -and $code -ne 0) {
-            Info "$_ 可达 (HTTP $code)"
+            Info "$_ 可达"
             $reachable = $true
         } else {
             Warn "$_ 不可达"
@@ -140,8 +140,19 @@ Info "Git $(git --version 2>$null)"
 Step "安装 OpenClaw"
 npm config set registry https://registry.npmmirror.com/ 2>$null
 $env:SHARP_IGNORE_GLOBAL_LIBVIPS = "1"
-& npm install -g openclaw@latest 2>&1 | ForEach-Object { if ($_ -notmatch '^npm warn') { $_ } } | Select-Object -Last 3
-Info "OpenClaw $(openclaw --version 2>$null)"
+$ErrorActionPreference = "Continue"
+& npm install -g openclaw@latest 2>&1 | Out-Host
+$ErrorActionPreference = "Stop"
+try { $ocVer = openclaw --version 2>$null } catch { $ocVer = "" }
+if ($ocVer) {
+    Info "OpenClaw $ocVer"
+} else {
+    # 刷新 PATH 再试
+    $env:Path = [System.Environment]::GetEnvironmentVariable("Path", "Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path", "User")
+    try { $ocVer = openclaw --version 2>$null } catch { $ocVer = "" }
+    if ($ocVer) { Info "OpenClaw $ocVer" }
+    else { Err "OpenClaw 安装可能失败，请检查上方输出"; exit 1 }
+}
 
 # ========== 初始化 ==========
 Step "初始化 OpenClaw"
