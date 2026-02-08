@@ -138,21 +138,31 @@ if (-not $hasGit) {
 Info "Git $(git --version 2>$null)"
 
 # ========== 安装 OpenClaw ==========
-Step "安装 OpenClaw"
-npm config set registry https://registry.npmmirror.com/ 2>$null
-$env:SHARP_IGNORE_GLOBAL_LIBVIPS = "1"
-$ErrorActionPreference = "Continue"
-cmd /c "npm install -g openclaw@latest 2>&1"
-$ErrorActionPreference = "Continue"
-try { $ocVer = openclaw --version 2>$null } catch { $ocVer = "" }
-if ($ocVer) {
-    Info "OpenClaw $ocVer"
+Step "检查 OpenClaw"
+$existingOc = $null
+try { $existingOc = cmd /c "openclaw --version 2>&1" } catch {}
+if ($existingOc -and $existingOc -match "^\d") {
+    Info "OpenClaw $existingOc 已安装"
+    $doUpdate = Read-Host "[?] 是否更新到最新版? (y/N)"
+    if ($doUpdate -ne "y") {
+        Info "跳过安装"
+    } else {
+        Step "更新 OpenClaw"
+        npm config set registry https://registry.npmmirror.com/ 2>$null
+        $env:SHARP_IGNORE_GLOBAL_LIBVIPS = "1"
+        cmd /c "npm install -g openclaw@latest 2>&1"
+        Info "OpenClaw $(cmd /c 'openclaw --version 2>&1')"
+    }
 } else {
-    # 刷新 PATH 再试
+    Step "安装 OpenClaw"
+    npm config set registry https://registry.npmmirror.com/ 2>$null
+    $env:SHARP_IGNORE_GLOBAL_LIBVIPS = "1"
+    cmd /c "npm install -g openclaw@latest 2>&1"
+    # 刷新 PATH
     $env:Path = [System.Environment]::GetEnvironmentVariable("Path", "Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path", "User")
-    try { $ocVer = openclaw --version 2>$null } catch { $ocVer = "" }
+    try { $ocVer = cmd /c "openclaw --version 2>&1" } catch { $ocVer = "" }
     if ($ocVer) { Info "OpenClaw $ocVer" }
-    else { Err "OpenClaw 安装可能失败，请检查上方输出"; exit 1 }
+    else { Err "OpenClaw 安装失败"; exit 1 }
 }
 
 # ========== 初始化 ==========
@@ -347,6 +357,15 @@ Write-Host ""
 Write-Host "  📦 已安装:" -ForegroundColor White
 Write-Host "    • Node.js $(node -v 2>$null)"
 Write-Host "    • OpenClaw $(openclaw --version 2>$null)"
+# 读取 token 构建完整 URL
+$gwToken = ""
+try {
+    $cfgObj = Get-Content $configPath -Raw | ConvertFrom-Json
+    $gwToken = $cfgObj.gateway.auth.token
+} catch {}
+$webChatUrl = "http://localhost:18789"
+if ($gwToken) { $webChatUrl = "http://localhost:18789/?token=$gwToken" }
+
 Write-Host ""
 Write-Host "  ⚙️  已配置:" -ForegroundColor White
 Write-Host "    • 节点: $($NodeNames[$Node]) ($BaseUrl)"
@@ -354,8 +373,8 @@ Write-Host "    • 主模型: $PrimaryRef"
 if ($ClaudeKey) { Write-Host "    • Claude Provider: 已配置" -ForegroundColor Green }
 if ($CodexKey) { Write-Host "    • Codex Provider: 已配置" -ForegroundColor Green }
 Write-Host ""
-Write-Host "  🌐 WebChat: http://localhost:18789" -ForegroundColor Cyan
-Write-Host "     在浏览器中打开即可开始对话" -ForegroundColor Gray
+Write-Host "  🌐 WebChat 地址（复制到浏览器打开）:" -ForegroundColor White
+Write-Host "     $webChatUrl" -ForegroundColor Cyan
 Write-Host ""
 Write-Host "  📋 常用命令:" -ForegroundColor White
 Write-Host "    openclaw gateway status    — 查看状态"
