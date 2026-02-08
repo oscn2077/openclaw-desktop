@@ -141,7 +141,7 @@ Step "安装 OpenClaw"
 npm config set registry https://registry.npmmirror.com/ 2>$null
 $env:SHARP_IGNORE_GLOBAL_LIBVIPS = "1"
 $ErrorActionPreference = "Continue"
-& npm install -g openclaw@latest 2>&1 | Out-Host
+cmd /c "npm install -g openclaw@latest 2>&1"
 $ErrorActionPreference = "Continue"
 try { $ocVer = openclaw --version 2>$null } catch { $ocVer = "" }
 if ($ocVer) {
@@ -156,11 +156,7 @@ if ($ocVer) {
 
 # ========== 初始化 ==========
 Step "初始化 OpenClaw"
-$ErrorActionPreference = "Continue"
-& openclaw onboard --non-interactive --accept-risk --mode local --auth-choice skip `
-    --gateway-port 18789 --gateway-bind loopback --gateway-auth token `
-    --skip-channels --skip-skills --skip-health --skip-ui --install-daemon 2>&1 | Select-Object -Last 3
-$ErrorActionPreference = "Continue"
+cmd /c "openclaw onboard --non-interactive --accept-risk --mode local --auth-choice skip --gateway-port 18789 --gateway-bind loopback --gateway-auth token --skip-channels --skip-skills --skip-health --skip-ui --install-daemon 2>&1"
 
 # 检查配置文件是否生成
 $configPath = Join-Path $env:USERPROFILE ".openclaw\openclaw.json"
@@ -323,12 +319,13 @@ if ($DiscordToken) {
 
 # ========== 启动 + 验证 ==========
 Step "启动 Gateway"
-try { openclaw gateway restart 2>&1 | Out-Null } catch {}
-try { openclaw gateway start 2>&1 | Out-Null } catch {}
+cmd /c "openclaw gateway restart 2>&1" | Out-Null
+Start-Sleep -Seconds 1
+cmd /c "openclaw gateway start 2>&1" | Out-Null
 Start-Sleep -Seconds 2
 
 # 验证启动状态
-$gwStatus = openclaw gateway status 2>&1
+$gwStatus = cmd /c "openclaw gateway status 2>&1"
 if ($gwStatus -match "running|online|listening") {
     Info "Gateway 运行中 ✓"
 } else {
