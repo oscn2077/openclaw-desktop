@@ -4,6 +4,11 @@ const { spawn, execSync } = require('child_process');
 const fs = require('fs');
 const os = require('os');
 
+// ── Auto Updater (uncomment when ready to enable) ──
+// const { autoUpdater } = require('electron-updater');
+// autoUpdater.logger = require('electron-log');
+// autoUpdater.logger.transports.file.level = 'info';
+
 // ── Globals ──
 let mainWindow = null;
 let tray = null;
@@ -17,10 +22,31 @@ const CONFIG_PATH = path.join(OPENCLAW_HOME, 'openclaw.json');
 const ENV_PATH = path.join(OPENCLAW_HOME, '.env');
 const WORKSPACE_PATH = path.join(OPENCLAW_HOME, 'workspace');
 
+// ── Safe IPC send helper ──
+function sendToRenderer(channel, ...args) {
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.send(channel, ...args);
+  }
+}
+
 // ── App Ready ──
 app.whenReady().then(() => {
   createWindow();
   // createTray();  // TODO: system tray icon
+
+  // Auto Updater (uncomment when ready to enable)
+  // autoUpdater.checkForUpdatesAndNotify();
+  // autoUpdater.on('update-available', (info) => {
+  //   sendToRenderer('update-available', info);
+  // });
+  // autoUpdater.on('update-downloaded', (info) => {
+  //   sendToRenderer('update-downloaded', info);
+  //   // Optionally auto-install:
+  //   // autoUpdater.quitAndInstall();
+  // });
+  // autoUpdater.on('error', (err) => {
+  //   sendToRenderer('update-error', err.message);
+  // });
 });
 
 app.on('window-all-closed', () => {
@@ -28,6 +54,11 @@ app.on('window-all-closed', () => {
   // For now, quit entirely
   stopGateway();
   app.quit();
+});
+
+app.on('before-quit', () => {
+  // Ensure gateway is stopped on quit
+  stopGateway();
 });
 
 // ── Window ──
@@ -38,6 +69,7 @@ function createWindow() {
     minWidth: 800,
     minHeight: 600,
     title: 'OpenClaw Desktop',
+    icon: path.join(__dirname, '..', '..', 'assets', 'icon.png'),
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
@@ -48,6 +80,11 @@ function createWindow() {
 
   mainWindow.loadFile(path.join(__dirname, '..', 'renderer', 'index.html'));
 
+  // Clean up reference on close
+  mainWindow.on('closed', () => {
+    mainWindow = null;
+  });
+
   // Open DevTools in dev mode
   if (process.argv.includes('--dev')) {
     mainWindow.webContents.openDevTools();
@@ -56,67 +93,75 @@ function createWindow() {
 
 // ── Environment Detection ──
 ipcMain.handle('detect-environment', async () => {
-  const result = {
-    os: {
-      platform: process.platform,
-      arch: process.arch,
-      version: os.release(),
-      name: getOSName(),
-    },
-    node: { installed: false, version: null, path: null },
-    openclaw: { installed: false, version: null, path: null },
-    docker: { installed: false, version: null },
-    configExists: fs.existsSync(CONFIG_PATH),
-    workspaceExists: fs.existsSync(WORKSPACE_PATH),
-  };
-
-  // Check Node.js
   try {
-    result.node.version = execSync('node --version', { encoding: 'utf8' }).trim();
-    result.node.installed = true;
-    result.node.path = execSync(process.platform === 'win32' ? 'where node' : 'which node', { encoding: 'utf8' }).trim().split('\n')[0];
-  } catch (e) { /* not installed */ }
+    const result = {
+      os: {
+        platform: process.platform,
+        arch: process.arch,
+        version: os.release(),
+        name: getOSName(),
+      },
+      node: { installed: false, version: null, path: null },
+      openclaw: { installed: false, version: null, path: null },
+      docker: { installed: false, version: null },
+      configExists: fs.existsSync(CONFIG_PATH),
+      workspaceExists: fs.existsSync(WORKSPACE_PATH),
+    };
 
-  // Check OpenClaw
-  try {
-    result.openclaw.version = execSync('openclaw --version', { encoding: 'utf8' }).trim();
-    result.openclaw.installed = true;
-    result.openclaw.path = execSync(process.platform === 'win32' ? 'where openclaw' : 'which openclaw', { encoding: 'utf8' }).trim().split('\n')[0];
-  } catch (e) { /* not installed */ }
+    // Check Node.js
+    try {
+      result.node.version = execSync('node --version', { encoding: 'utf8', timeout: 5000 }).trim();
+      result.node.installed = true;
+      result.node.path = execSync(process.platform === 'win32' ? 'where node' : 'which node', { encoding: 'utf8', timeout: 5000 }).trim().split('\n')[0];
+    } catch (e) { /* not installed */ }
 
-  // Check Docker
-  try {
-    result.docker.version = execSync('docker --version', { encoding: 'utf8' }).trim();
-    result.docker.installed = true;
-  } catch (e) { /* not installed */ }
+    // Check OpenClaw
+    try {
+      result.openclaw.version = execSync('openclaw --version', { encoding: 'utf8', timeout: 5000 }).trim();
+      result.openclaw.installed = true;
+      result.openclaw.path = execSync(process.platform === 'win32' ? 'where openclaw' : 'which openclaw', { encoding: 'utf8', timeout: 5000 }).trim().split('\n')[0];
+    } catch (e) { /* not installed */ }
 
-  return result;
+    // Check Docker
+    try {
+      result.docker.version = execSync('docker --version', { encoding: 'utf8', timeout: 5000 }).trim();
+      result.docker.installed = true;
+    } catch (e) { /* not installed */ }
+
+    return result;
+  } catch (e) {
+    return { error: e.message };
+  }
 });
 
 // ── Install OpenClaw ──
 ipcMain.handle('install-openclaw', async (event) => {
-  return new Promise((resolve, reject) => {
-    const cmd = process.platform === 'win32' ? 'npm.cmd' : 'npm';
-    const proc = spawn(cmd, ['install', '-g', 'openclaw@latest'], {
-      env: { ...process.env },
-      shell: true,
-    });
+  try {
+    return new Promise((resolve) => {
+      const cmd = process.platform === 'win32' ? 'npm.cmd' : 'npm';
+      const proc = spawn(cmd, ['install', '-g', 'openclaw@latest'], {
+        env: { ...process.env },
+        shell: true,
+      });
 
-    let output = '';
-    proc.stdout.on('data', (d) => {
-      output += d.toString();
-      mainWindow.webContents.send('install-progress', d.toString());
+      let output = '';
+      proc.stdout.on('data', (d) => {
+        output += d.toString();
+        sendToRenderer('install-progress', d.toString());
+      });
+      proc.stderr.on('data', (d) => {
+        output += d.toString();
+        sendToRenderer('install-progress', d.toString());
+      });
+      proc.on('close', (code) => {
+        if (code === 0) resolve({ success: true, output });
+        else resolve({ success: false, output, code });
+      });
+      proc.on('error', (err) => resolve({ success: false, error: err.message }));
     });
-    proc.stderr.on('data', (d) => {
-      output += d.toString();
-      mainWindow.webContents.send('install-progress', d.toString());
-    });
-    proc.on('close', (code) => {
-      if (code === 0) resolve({ success: true, output });
-      else resolve({ success: false, output, code });
-    });
-    proc.on('error', (err) => resolve({ success: false, error: err.message }));
-  });
+  } catch (e) {
+    return { success: false, error: e.message };
+  }
 });
 
 // ── Config Management ──
@@ -157,176 +202,188 @@ ipcMain.handle('save-env', async (event, envVars) => {
 
 // ── Generate Config from Wizard ──
 ipcMain.handle('generate-config', async (event, wizardData) => {
-  const config = {
-    agents: {
-      defaults: {
-        maxConcurrent: 4,
-        subagents: { maxConcurrent: 8 },
-        compaction: { mode: 'safeguard' },
-        workspace: WORKSPACE_PATH,
-        model: {
-          primary: null,
-          fallbacks: [],
+  try {
+    const config = {
+      agents: {
+        defaults: {
+          maxConcurrent: 4,
+          subagents: { maxConcurrent: 8 },
+          compaction: { mode: 'safeguard' },
+          workspace: WORKSPACE_PATH,
+          model: {
+            primary: null,
+            fallbacks: [],
+          },
+          models: {},
         },
-        models: {},
       },
-    },
-    gateway: {
-      mode: 'local',
-      auth: {
-        mode: 'token',
-        token: generateToken(),
+      gateway: {
+        mode: 'local',
+        auth: {
+          mode: 'token',
+          token: generateToken(),
+        },
+        port: 18789,
+        bind: 'loopback',
       },
-      port: 18789,
-      bind: 'loopback',
-    },
-    models: {
-      mode: 'merge',
-      providers: {},
-    },
-  };
+      models: {
+        mode: 'merge',
+        providers: {},
+      },
+    };
 
-  const envVars = {};
+    const envVars = {};
 
-  // Process models
-  for (const model of wizardData.models) {
-    if (model.type === 'proxy') {
-      // Third-party proxy (中转)
-      const providerId = model.providerId;
-      const providerConfig = {
-        baseUrl: model.baseUrl,
-        apiKey: model.apiKey,
-        auth: 'api-key',
-        api: model.apiFormat || 'anthropic-messages',
-        headers: {},
-        authHeader: false,
-      };
+    // Process models
+    for (const model of wizardData.models) {
+      if (model.type === 'proxy') {
+        // Third-party proxy (中转)
+        const providerId = model.providerId;
+        const providerConfig = {
+          baseUrl: model.baseUrl,
+          apiKey: model.apiKey,
+          auth: 'api-key',
+          api: model.apiFormat || 'anthropic-messages',
+          headers: {},
+          authHeader: false,
+        };
 
-      // Claude proxy: empty models array (auto-detected)
-      // OpenAI/Codex proxy: need explicit model declarations
-      if (model.apiFormat === 'anthropic-messages') {
-        providerConfig.models = [];
-      } else {
-        providerConfig.models = (model.models || []).map(m => ({
-          id: m.id,
-          name: m.name,
-          reasoning: m.reasoning || false,
-          input: m.input || ['text'],
-          cost: m.cost || { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
-          contextWindow: m.contextWindow || 128000,
-          maxTokens: m.maxTokens || 32768,
-        }));
-      }
-
-      config.models.providers[providerId] = providerConfig;
-
-      // Set primary model
-      const primaryModelId = model.primaryModelId || (model.models?.[0]?.id);
-      if (primaryModelId) {
-        const modelRef = `${providerId}/${primaryModelId}`;
-        if (!config.agents.defaults.model.primary) {
-          config.agents.defaults.model.primary = modelRef;
+        // Claude proxy: empty models array (auto-detected)
+        // OpenAI/Codex proxy: need explicit model declarations
+        if (model.apiFormat === 'anthropic-messages') {
+          providerConfig.models = [];
         } else {
-          config.agents.defaults.model.fallbacks.push(modelRef);
+          providerConfig.models = (model.models || []).map(m => ({
+            id: m.id,
+            name: m.name,
+            reasoning: m.reasoning || false,
+            input: m.input || ['text'],
+            cost: m.cost || { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+            contextWindow: m.contextWindow || 128000,
+            maxTokens: m.maxTokens || 32768,
+          }));
+        }
+
+        config.models.providers[providerId] = providerConfig;
+
+        // Set primary model
+        const primaryModelId = model.primaryModelId || (model.models?.[0]?.id);
+        if (primaryModelId) {
+          const modelRef = `${providerId}/${primaryModelId}`;
+          if (!config.agents.defaults.model.primary) {
+            config.agents.defaults.model.primary = modelRef;
+          } else {
+            config.agents.defaults.model.fallbacks.push(modelRef);
+          }
+        }
+      } else if (model.type === 'official') {
+        // Official API — use built-in provider, store key in .env
+        const envKey = model.envKey;
+        envVars[envKey] = model.apiKey;
+
+        if (!config.agents.defaults.model.primary) {
+          config.agents.defaults.model.primary = model.modelRef;
+        } else {
+          config.agents.defaults.model.fallbacks.push(model.modelRef);
         }
       }
-    } else if (model.type === 'official') {
-      // Official API — use built-in provider, store key in .env
-      const envKey = model.envKey;
-      envVars[envKey] = model.apiKey;
+    }
 
-      if (!config.agents.defaults.model.primary) {
-        config.agents.defaults.model.primary = model.modelRef;
-      } else {
-        config.agents.defaults.model.fallbacks.push(model.modelRef);
+    // Process channels
+    if (wizardData.channels) {
+      for (const ch of wizardData.channels) {
+        if (ch.type === 'telegram') {
+          config.telegram = {
+            token: ch.botToken,
+            allowedUsers: ch.allowedUsers || [],
+          };
+        } else if (ch.type === 'discord') {
+          config.discord = {
+            token: ch.botToken,
+          };
+        }
+        // More channels...
       }
     }
-  }
 
-  // Process channels
-  if (wizardData.channels) {
-    for (const ch of wizardData.channels) {
-      if (ch.type === 'telegram') {
-        config.telegram = {
-          token: ch.botToken,
-          allowedUsers: ch.allowedUsers || [],
-        };
-      } else if (ch.type === 'discord') {
-        config.discord = {
-          token: ch.botToken,
-        };
-      }
-      // More channels...
-    }
+    return { config, envVars };
+  } catch (e) {
+    return { error: e.message };
   }
-
-  return { config, envVars };
 });
 
 // ── Gateway Control ──
 ipcMain.handle('start-gateway', async () => {
-  if (gatewayProcess) return { success: false, error: 'Already running' };
+  try {
+    if (gatewayProcess) return { success: false, error: 'Already running' };
 
-  gatewayStatus = 'starting';
-  mainWindow.webContents.send('gateway-status', gatewayStatus);
+    gatewayStatus = 'starting';
+    sendToRenderer('gateway-status', gatewayStatus);
 
-  return new Promise((resolve) => {
-    const cmd = process.platform === 'win32' ? 'openclaw.cmd' : 'openclaw';
-    gatewayProcess = spawn(cmd, ['gateway', 'start', '--foreground'], {
-      env: { ...process.env },
-      shell: true,
-      stdio: ['pipe', 'pipe', 'pipe'],
+    return new Promise((resolve) => {
+      const cmd = process.platform === 'win32' ? 'openclaw.cmd' : 'openclaw';
+      gatewayProcess = spawn(cmd, ['gateway', 'start', '--foreground'], {
+        env: { ...process.env },
+        shell: true,
+        stdio: ['pipe', 'pipe', 'pipe'],
+      });
+
+      let started = false;
+
+      const onData = (data) => {
+        const text = data.toString();
+        sendToRenderer('gateway-log', text);
+        if (!started && (text.includes('listening') || text.includes('ready') || text.includes('Gateway'))) {
+          started = true;
+          gatewayStatus = 'running';
+          gatewayStartTime = Date.now();
+          sendToRenderer('gateway-status', gatewayStatus);
+          resolve({ success: true });
+        }
+      };
+
+      gatewayProcess.stdout.on('data', onData);
+      gatewayProcess.stderr.on('data', onData);
+
+      gatewayProcess.on('close', (code) => {
+        gatewayProcess = null;
+        gatewayStatus = 'stopped';
+        sendToRenderer('gateway-status', gatewayStatus);
+        if (!started) {
+          resolve({ success: false, error: `Exited with code ${code}` });
+        }
+      });
+
+      gatewayProcess.on('error', (err) => {
+        gatewayProcess = null;
+        gatewayStatus = 'error';
+        sendToRenderer('gateway-status', gatewayStatus);
+        if (!started) {
+          resolve({ success: false, error: err.message });
+        }
+      });
+
+      // Timeout
+      setTimeout(() => {
+        if (!started) {
+          gatewayStatus = 'running'; // assume running
+          gatewayStartTime = Date.now();
+          sendToRenderer('gateway-status', gatewayStatus);
+          resolve({ success: true });
+        }
+      }, 10000);
     });
-
-    let started = false;
-
-    const onData = (data) => {
-      const text = data.toString();
-      mainWindow.webContents.send('gateway-log', text);
-      if (!started && (text.includes('listening') || text.includes('ready') || text.includes('Gateway'))) {
-        started = true;
-        gatewayStatus = 'running';
-        gatewayStartTime = Date.now();
-        mainWindow.webContents.send('gateway-status', gatewayStatus);
-        resolve({ success: true });
-      }
-    };
-
-    gatewayProcess.stdout.on('data', onData);
-    gatewayProcess.stderr.on('data', onData);
-
-    gatewayProcess.on('close', (code) => {
-      gatewayProcess = null;
-      gatewayStatus = 'stopped';
-      mainWindow.webContents.send('gateway-status', gatewayStatus);
-      if (!started) {
-        resolve({ success: false, error: `Exited with code ${code}` });
-      }
-    });
-
-    gatewayProcess.on('error', (err) => {
-      gatewayProcess = null;
-      gatewayStatus = 'error';
-      mainWindow.webContents.send('gateway-status', gatewayStatus);
-      if (!started) {
-        resolve({ success: false, error: err.message });
-      }
-    });
-
-    // Timeout
-    setTimeout(() => {
-      if (!started) {
-        gatewayStatus = 'running'; // assume running
-        gatewayStartTime = Date.now();
-        mainWindow.webContents.send('gateway-status', gatewayStatus);
-        resolve({ success: true });
-      }
-    }, 10000);
-  });
+  } catch (e) {
+    return { success: false, error: e.message };
+  }
 });
 
 ipcMain.handle('stop-gateway', async () => {
-  return stopGateway();
+  try {
+    return stopGateway();
+  } catch (e) {
+    return { success: false, error: e.message };
+  }
 });
 
 ipcMain.handle('get-gateway-status', async () => {
@@ -335,14 +392,16 @@ ipcMain.handle('get-gateway-status', async () => {
 
 function stopGateway() {
   if (gatewayProcess) {
-    gatewayProcess.kill();
+    try {
+      gatewayProcess.kill();
+    } catch (e) {
+      // Process may already be dead
+    }
     gatewayProcess = null;
   }
   gatewayStatus = 'stopped';
   gatewayStartTime = null;
-  if (mainWindow) {
-    mainWindow.webContents.send('gateway-status', gatewayStatus);
-  }
+  sendToRenderer('gateway-status', gatewayStatus);
   return { success: true };
 }
 
@@ -363,10 +422,11 @@ function getOSName() {
 
 // ── Restart Gateway ──
 ipcMain.handle('restart-gateway', async () => {
-  stopGateway();
-  await new Promise(r => setTimeout(r, 1000));
   try {
-    const gw = spawn('openclaw', ['gateway', 'start'], { stdio: 'pipe', detached: true });
+    stopGateway();
+    await new Promise(r => setTimeout(r, 1000));
+    const cmd = process.platform === 'win32' ? 'openclaw.cmd' : 'openclaw';
+    const gw = spawn(cmd, ['gateway', 'start'], { stdio: 'pipe', detached: true, shell: true });
     gw.unref();
     gatewayProcess = gw;
     return { success: true, restarted: true };
@@ -415,7 +475,17 @@ ipcMain.handle('read-gateway-logs', async () => {
 
 // ── Open External Links ──
 ipcMain.handle('open-external', async (event, url) => {
-  shell.openExternal(url);
+  try {
+    // Validate URL to prevent arbitrary command execution
+    const parsed = new URL(url);
+    if (parsed.protocol === 'http:' || parsed.protocol === 'https:') {
+      await shell.openExternal(url);
+      return { success: true };
+    }
+    return { success: false, error: 'Only http/https URLs are allowed' };
+  } catch (e) {
+    return { success: false, error: e.message };
+  }
 });
 
 ipcMain.handle('get-gateway-url', async () => {
@@ -431,147 +501,156 @@ ipcMain.handle('get-gateway-url', async () => {
 
 // ── Test API Connection ──
 ipcMain.handle('test-connection', async (event, { baseUrl, apiKey, apiFormat }) => {
-  const https = require('https');
-  const http = require('http');
+  try {
+    const https = require('https');
+    const http = require('http');
 
-  return new Promise((resolve) => {
-    try {
-      let testUrl, options, postData;
+    return new Promise((resolve) => {
+      try {
+        let testUrl, options, postData;
 
-      if (apiFormat === 'anthropic-messages') {
-        // Anthropic-style: POST /v1/messages with minimal payload
-        testUrl = new URL(baseUrl.replace(/\/$/, '') + '/v1/messages');
-        postData = JSON.stringify({
-          model: 'claude-sonnet-4-5',
-          max_tokens: 1,
-          messages: [{ role: 'user', content: 'hi' }],
+        if (apiFormat === 'anthropic-messages') {
+          // Anthropic-style: POST /v1/messages with minimal payload
+          testUrl = new URL(baseUrl.replace(/\/$/, '') + '/v1/messages');
+          postData = JSON.stringify({
+            model: 'claude-sonnet-4-5',
+            max_tokens: 1,
+            messages: [{ role: 'user', content: 'hi' }],
+          });
+          options = {
+            hostname: testUrl.hostname,
+            port: testUrl.port || (testUrl.protocol === 'https:' ? 443 : 80),
+            path: testUrl.pathname,
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'x-api-key': apiKey,
+              'anthropic-version': '2023-06-01',
+              'Content-Length': Buffer.byteLength(postData),
+            },
+            timeout: 15000,
+          };
+        } else if (apiFormat === 'openai-responses' || apiFormat === 'openai-chat') {
+          // OpenAI-style: POST /v1/chat/completions
+          testUrl = new URL(baseUrl.replace(/\/$/, '') + '/v1/chat/completions');
+          postData = JSON.stringify({
+            model: 'gpt-4.1',
+            max_tokens: 1,
+            messages: [{ role: 'user', content: 'hi' }],
+          });
+          options = {
+            hostname: testUrl.hostname,
+            port: testUrl.port || (testUrl.protocol === 'https:' ? 443 : 80),
+            path: testUrl.pathname,
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${apiKey}`,
+              'Content-Length': Buffer.byteLength(postData),
+            },
+            timeout: 15000,
+          };
+        } else if (apiFormat === 'gemini') {
+          // Gemini: just check the API key with a models list
+          testUrl = new URL(`https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`);
+          options = {
+            hostname: testUrl.hostname,
+            port: 443,
+            path: testUrl.pathname + testUrl.search,
+            method: 'GET',
+            headers: {},
+            timeout: 15000,
+          };
+          postData = null;
+        } else if (apiFormat === 'zhipu') {
+          // Zhipu/GLM: POST chat completions
+          testUrl = new URL('https://open.bigmodel.cn/api/paas/v4/chat/completions');
+          postData = JSON.stringify({
+            model: 'glm-4-flash',
+            max_tokens: 1,
+            messages: [{ role: 'user', content: 'hi' }],
+          });
+          options = {
+            hostname: testUrl.hostname,
+            port: 443,
+            path: testUrl.pathname,
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${apiKey}`,
+              'Content-Length': Buffer.byteLength(postData),
+            },
+            timeout: 15000,
+          };
+        } else {
+          resolve({ success: false, error: 'Unknown API format' });
+          return;
+        }
+
+        const proto = (testUrl.protocol === 'https:') ? https : http;
+        const req = proto.request(options, (res) => {
+          let body = '';
+          res.on('data', (chunk) => { body += chunk; });
+          res.on('end', () => {
+            // 200 = success, 401/403 = bad key, anything else = at least reachable
+            if (res.statusCode === 200 || res.statusCode === 201) {
+              resolve({ success: true });
+            } else if (res.statusCode === 401 || res.statusCode === 403) {
+              resolve({ success: false, error: `认证失败 (HTTP ${res.statusCode})，请检查 API Key` });
+            } else if (res.statusCode === 400) {
+              // 400 often means the API is reachable but request was bad — key is valid
+              resolve({ success: true, note: 'API 可达，Key 格式正确' });
+            } else {
+              resolve({ success: false, error: `HTTP ${res.statusCode}: ${body.slice(0, 200)}` });
+            }
+          });
         });
-        options = {
-          hostname: testUrl.hostname,
-          port: testUrl.port || (testUrl.protocol === 'https:' ? 443 : 80),
-          path: testUrl.pathname,
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'x-api-key': apiKey,
-            'anthropic-version': '2023-06-01',
-            'Content-Length': Buffer.byteLength(postData),
-          },
-          timeout: 15000,
-        };
-      } else if (apiFormat === 'openai-responses') {
-        // OpenAI Responses API: POST /v1/responses
-        testUrl = new URL(baseUrl.replace(/\/$/, '') + '/v1/responses');
-        postData = JSON.stringify({
-          model: 'gpt-5.2',
-          input: 'hi',
+
+        req.on('error', (err) => {
+          resolve({ success: false, error: `连接失败: ${err.message}` });
         });
-        options = {
-          hostname: testUrl.hostname,
-          port: testUrl.port || (testUrl.protocol === 'https:' ? 443 : 80),
-          path: testUrl.pathname,
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${apiKey}`,
-            'Content-Length': Buffer.byteLength(postData),
-          },
-          timeout: 15000,
-        };
-      } else if (apiFormat === 'gemini') {
-        // Gemini: just check the API key with a models list
-        testUrl = new URL(`https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`);
-        options = {
-          hostname: testUrl.hostname,
-          port: 443,
-          path: testUrl.pathname + testUrl.search,
-          method: 'GET',
-          headers: {},
-          timeout: 15000,
-        };
-        postData = null;
-      } else if (apiFormat === 'zhipu') {
-        // Zhipu/GLM: POST chat completions
-        testUrl = new URL('https://open.bigmodel.cn/api/paas/v4/chat/completions');
-        postData = JSON.stringify({
-          model: 'glm-4-flash',
-          max_tokens: 1,
-          messages: [{ role: 'user', content: 'hi' }],
+
+        req.on('timeout', () => {
+          req.destroy();
+          resolve({ success: false, error: '连接超时 (15s)' });
         });
-        options = {
-          hostname: testUrl.hostname,
-          port: 443,
-          path: testUrl.pathname,
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${apiKey}`,
-            'Content-Length': Buffer.byteLength(postData),
-          },
-          timeout: 15000,
-        };
-      } else {
-        resolve({ success: false, error: 'Unknown API format' });
-        return;
+
+        if (postData) req.write(postData);
+        req.end();
+      } catch (e) {
+        resolve({ success: false, error: e.message });
       }
-
-      const proto = (testUrl.protocol === 'https:') ? https : http;
-      const req = proto.request(options, (res) => {
-        let body = '';
-        res.on('data', (chunk) => { body += chunk; });
-        res.on('end', () => {
-          // 200 = success, 401/403 = bad key, anything else = at least reachable
-          if (res.statusCode === 200 || res.statusCode === 201) {
-            resolve({ success: true });
-          } else if (res.statusCode === 401 || res.statusCode === 403) {
-            resolve({ success: false, error: `认证失败 (HTTP ${res.statusCode})，请检查 API Key` });
-          } else if (res.statusCode === 400) {
-            // 400 often means the API is reachable but request was bad — key is valid
-            resolve({ success: true, note: 'API 可达，Key 格式正确' });
-          } else {
-            resolve({ success: false, error: `HTTP ${res.statusCode}: ${body.slice(0, 200)}` });
-          }
-        });
-      });
-
-      req.on('error', (err) => {
-        resolve({ success: false, error: `连接失败: ${err.message}` });
-      });
-
-      req.on('timeout', () => {
-        req.destroy();
-        resolve({ success: false, error: '连接超时 (15s)' });
-      });
-
-      if (postData) req.write(postData);
-      req.end();
-    } catch (e) {
-      resolve({ success: false, error: e.message });
-    }
-  });
+    });
+  } catch (e) {
+    return { success: false, error: e.message };
+  }
 });
 
 // ── System Info ──
 ipcMain.handle('get-system-info', async () => {
-  const info = {
-    nodeVersion: process.version,
-    electronVersion: process.versions.electron,
-    os: `${getOSName()} (${process.arch})`,
-    platform: process.platform,
-    openclawVersion: null,
-    gatewayUptime: null,
-  };
-
   try {
-    info.openclawVersion = execSync('openclaw --version', { encoding: 'utf8' }).trim();
+    const info = {
+      nodeVersion: process.version,
+      electronVersion: process.versions.electron,
+      os: `${getOSName()} (${process.arch})`,
+      platform: process.platform,
+      openclawVersion: null,
+      gatewayUptime: null,
+    };
+
+    try {
+      info.openclawVersion = execSync('openclaw --version', { encoding: 'utf8', timeout: 5000 }).trim();
+    } catch (e) {
+      info.openclawVersion = '未安装';
+    }
+
+    // Gateway uptime
+    if (gatewayProcess && gatewayStatus === 'running') {
+      info.gatewayUptime = Date.now() - (gatewayStartTime || Date.now());
+    }
+
+    return info;
   } catch (e) {
-    info.openclawVersion = '未安装';
+    return { error: e.message };
   }
-
-  // Gateway uptime
-  if (gatewayProcess && gatewayStatus === 'running') {
-    info.gatewayUptime = Date.now() - (gatewayStartTime || Date.now());
-  }
-
-  return info;
 });

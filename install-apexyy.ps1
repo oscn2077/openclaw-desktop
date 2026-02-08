@@ -51,11 +51,17 @@ Step "网络连通性检查"
 $reachable = $false
 @("https://yunyi.rdzhvip.com", "https://yunyi.cfd") | ForEach-Object {
     try {
-        $response = Invoke-WebRequest -Uri $_ -TimeoutSec 10 -UseBasicParsing -ErrorAction SilentlyContinue
+        $response = Invoke-WebRequest -Uri "$_/claude/v1/messages" -Method Head -TimeoutSec 10 -UseBasicParsing -ErrorAction Stop
         Info "$_ 可达"
         $reachable = $true
     } catch {
-        Warn "$_ 不可达"
+        $code = $_.Exception.Response.StatusCode.value__
+        if ($code -and $code -ne 0) {
+            Info "$_ 可达 (HTTP $code)"
+            $reachable = $true
+        } else {
+            Warn "$_ 不可达"
+        }
     }
 }
 if (-not $reachable) {
@@ -134,14 +140,16 @@ Info "Git $(git --version 2>$null)"
 Step "安装 OpenClaw"
 npm config set registry https://registry.npmmirror.com/ 2>$null
 $env:SHARP_IGNORE_GLOBAL_LIBVIPS = "1"
-npm install -g openclaw@latest 2>&1 | Select-Object -Last 3
+& npm install -g openclaw@latest 2>&1 | ForEach-Object { if ($_ -notmatch '^npm warn') { $_ } } | Select-Object -Last 3
 Info "OpenClaw $(openclaw --version 2>$null)"
 
 # ========== 初始化 ==========
 Step "初始化 OpenClaw"
-openclaw onboard --non-interactive --accept-risk --mode local --auth-choice skip `
+$ErrorActionPreference = "Continue"
+& openclaw onboard --non-interactive --accept-risk --mode local --auth-choice skip `
     --gateway-port 18789 --gateway-bind loopback --gateway-auth token `
     --skip-channels --skip-skills --skip-health --skip-ui --install-daemon 2>&1 | Select-Object -Last 3
+$ErrorActionPreference = "Stop"
 
 # 检查配置文件是否生成
 $configPath = Join-Path $env:USERPROFILE ".openclaw\openclaw.json"
